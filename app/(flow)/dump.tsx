@@ -1,17 +1,22 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
-  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import {
   ArrowUp,
   Ban,
@@ -25,17 +30,15 @@ import {
   Clock,
   ChevronRight,
 } from 'lucide-react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TaskEvalSheet } from '../../components/TaskEvalSheet';
 import { PriorityDot } from '../../components/atoms/PriorityDot';
-import { Badge } from '../../components/atoms/Badge';
 import { useTaskStore } from '../../store/tasks';
 import { Task, WorkType } from '../../types/task';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
 
-const JITTER: number[] = [-2.1, 1.4, -0.8, 2.3, -1.7, 0.9, -2.5, 1.1, -0.5, 2.0];
+const JITTER: number[] = [-1.6, 1.1, -0.7, 1.8, -1.4, 0.6, -1.9, 0.9, -0.4, 1.5];
 
 const WORK_TYPE_ICONS: Record<WorkType, React.FC<{ size: number; color: string }>> = {
   deep: Brain,
@@ -45,8 +48,13 @@ const WORK_TYPE_ICONS: Record<WorkType, React.FC<{ size: number; color: string }
   admin: ClipboardList,
 };
 
+function impact(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
+  if (Platform.OS !== 'web') Haptics.impactAsync(style).catch(() => {});
+}
+
 export default function DumpScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { tasks, addTask, removeTask, toggleBlocked } = useTaskStore();
   const [inputText, setInputText] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -57,12 +65,14 @@ export default function DumpScreen() {
 
   const handleSubmitText = useCallback(() => {
     if (!inputText.trim()) return;
+    impact(Haptics.ImpactFeedbackStyle.Medium);
     setSheetOpen(true);
   }, [inputText]);
 
   const handleAddTask = useCallback(
     (task: Task) => {
       addTask(task);
+      impact(Haptics.ImpactFeedbackStyle.Light);
       setInputText('');
       setSheetOpen(false);
     },
@@ -70,6 +80,7 @@ export default function DumpScreen() {
   );
 
   const handleSort = useCallback(() => {
+    impact(Haptics.ImpactFeedbackStyle.Heavy);
     router.push('/(flow)/sorting');
   }, [router]);
 
@@ -78,63 +89,85 @@ export default function DumpScreen() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerEyebrow}>Brain dump</Text>
             <Text style={styles.headerTitle}>What's on your mind?</Text>
           </View>
           {blockedCount > 0 && (
-            <View style={styles.blockedBadge}>
+            <Animated.View entering={FadeIn} style={styles.blockedBadge}>
               <Ban size={12} color={C.fgTertiary} />
               <Text style={styles.blockedBadgeText}>{blockedCount}</Text>
-            </View>
+            </Animated.View>
           )}
         </View>
 
         {/* Task list */}
         <ScrollView
           style={styles.list}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: canSort ? 140 : 100 },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {tasks.length === 0 && (
-            <View style={styles.emptyState}>
+            <Animated.View entering={FadeIn.delay(150)} style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>Nothing here yet.</Text>
               <Text style={styles.emptyText}>
                 Type anything — tasks, worries, ideas.{'\n'}Don't filter. Just dump.
               </Text>
-            </View>
+            </Animated.View>
           )}
           {tasks.map((task, i) => (
-            <TaskCard
+            <Animated.View
               key={task.id}
-              task={task}
-              jitter={JITTER[i % JITTER.length]}
-              onRemove={() => removeTask(task.id)}
-              onToggleBlocked={() => toggleBlocked(task.id)}
-            />
+              entering={FadeIn.duration(220)}
+              exiting={FadeOut.duration(180)}
+              layout={LinearTransition.springify().damping(18)}
+            >
+              <TaskCard
+                task={task}
+                jitter={JITTER[i % JITTER.length]}
+                onRemove={() => {
+                  impact();
+                  removeTask(task.id);
+                }}
+                onToggleBlocked={() => {
+                  impact();
+                  toggleBlocked(task.id);
+                }}
+              />
+            </Animated.View>
           ))}
         </ScrollView>
-
-        {/* Sort CTA */}
-        {canSort && (
-          <View style={styles.sortCTAWrapper}>
-            <TouchableOpacity style={styles.sortCTA} onPress={handleSort} activeOpacity={0.85}>
-              <Text style={styles.sortCTAText}>Sort my day</Text>
-              <ChevronRight size={18} color={C.base900} />
-            </TouchableOpacity>
-            <Text style={styles.sortHint}>
-              {unblocked.length} task{unblocked.length !== 1 ? 's' : ''} ready
-            </Text>
-          </View>
-        )}
       </SafeAreaView>
 
-      {/* Input bar */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
-        <SafeAreaView edges={['bottom']} style={styles.inputSafe}>
+      {/* Sort CTA — floats above input bar */}
+      {canSort && (
+        <Animated.View
+          entering={FadeIn}
+          exiting={FadeOut}
+          style={[styles.sortCTAWrapper, { bottom: 76 + insets.bottom }]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            style={({ pressed }) => [styles.sortCTA, pressed && styles.sortCTAPressed]}
+            onPress={handleSort}
+            accessibilityRole="button"
+          >
+            <Text style={styles.sortCTAText}>Sort my day</Text>
+            <ChevronRight size={18} color={C.base900} />
+          </Pressable>
+          <Text style={styles.sortHint}>
+            {unblocked.length} task{unblocked.length !== 1 ? 's' : ''} ready
+          </Text>
+        </Animated.View>
+      )}
+
+      {/* Input bar — sticks to keyboard */}
+      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+        <View style={[styles.inputSafe, { paddingBottom: insets.bottom || 12 }]}>
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
@@ -145,18 +178,24 @@ export default function DumpScreen() {
               onSubmitEditing={handleSubmitText}
               returnKeyType="done"
               multiline={false}
+              accessibilityLabel="Add a thought"
             />
-            <TouchableOpacity
-              style={[styles.inputBtn, !inputText.trim() && styles.inputBtnDisabled]}
+            <Pressable
+              style={({ pressed }) => [
+                styles.inputBtn,
+                !inputText.trim() && styles.inputBtnDisabled,
+                pressed && inputText.trim() && styles.inputBtnPressed,
+              ]}
               onPress={handleSubmitText}
               disabled={!inputText.trim()}
-              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Submit thought"
             >
               <ArrowUp size={18} color={inputText.trim() ? C.base900 : C.fgTertiary} />
-            </TouchableOpacity>
+            </Pressable>
           </View>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
+        </View>
+      </KeyboardStickyView>
 
       {/* TaskEvalSheet */}
       {sheetOpen && (
@@ -190,8 +229,8 @@ function TaskCard({ task, jitter, onRemove, onToggleBlocked }: CardProps) {
       ]}
     >
       <View style={styles.cardLeft}>
-        <PriorityDot importance={task.importance} size={8} />
-        <Text style={[styles.cardText, task.blocked && styles.cardTextBlocked]} numberOfLines={2}>
+        <PriorityDot importance={task.importance} size={9} />
+        <Text style={[styles.cardText, task.blocked && styles.cardTextBlocked]} numberOfLines={3}>
           {task.text}
         </Text>
       </View>
@@ -219,20 +258,28 @@ function TaskCard({ task, jitter, onRemove, onToggleBlocked }: CardProps) {
           )}
         </View>
         <View style={styles.cardActions}>
-          <TouchableOpacity
+          <Pressable
             onPress={onToggleBlocked}
-            style={[styles.iconBtn, task.blocked && styles.iconBtnActive]}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              task.blocked && styles.iconBtnActive,
+              pressed && styles.iconBtnPressed,
+            ]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel={task.blocked ? 'Unblock task' : 'Block task'}
           >
             <Ban size={14} color={task.blocked ? C.fgSecondary : C.fgTertiary} />
-          </TouchableOpacity>
-          <TouchableOpacity
+          </Pressable>
+          <Pressable
             onPress={onRemove}
-            style={styles.iconBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel="Remove task"
           >
             <X size={14} color={C.fgTertiary} />
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
     </View>
@@ -253,20 +300,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: S[5],
     paddingTop: S[4],
-    paddingBottom: S[4],
+    paddingBottom: S[5],
   },
   headerEyebrow: {
     fontFamily: Font.bodyMedium,
     fontSize: Size.xs,
-    color: C.fgTertiary,
+    color: C.gold400,
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 2.5,
     marginBottom: 4,
   },
   headerTitle: {
     fontFamily: Font.display,
     fontSize: Size['3xl'],
     color: C.fgPrimary,
+    lineHeight: Size['3xl'] * 1.1,
   },
   blockedBadge: {
     flexDirection: 'row',
@@ -275,10 +323,12 @@ const styles = StyleSheet.create({
     backgroundColor: C.base700,
     borderRadius: 20,
     paddingHorizontal: S[3],
-    paddingVertical: S[1],
+    paddingVertical: S[1] + 2,
+    borderWidth: 1,
+    borderColor: C.borderSubtle,
   },
   blockedBadgeText: {
-    fontFamily: Font.body,
+    fontFamily: Font.bodyMedium,
     fontSize: Size.xs,
     color: C.fgTertiary,
   },
@@ -287,27 +337,44 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: S[5],
-    paddingBottom: S[4],
     gap: S[3],
   },
   emptyState: {
-    marginTop: S[8],
+    marginTop: S[10],
     alignItems: 'center',
+    paddingHorizontal: S[5],
+    gap: S[2],
+  },
+  emptyTitle: {
+    fontFamily: Font.display,
+    fontSize: Size.xl,
+    color: C.fgSecondary,
   },
   emptyText: {
     fontFamily: Font.body,
-    fontSize: Size.base,
+    fontSize: Size.sm,
     color: C.fgTertiary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: Size.sm * 1.6,
   },
   card: {
     backgroundColor: C.base700,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: S[4],
     borderWidth: 1,
     borderColor: C.borderDefault,
-    gap: S[2],
+    gap: S[3],
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.22,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   cardBlocked: {
     opacity: 0.45,
@@ -315,15 +382,15 @@ const styles = StyleSheet.create({
   cardLeft: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: S[2],
+    gap: S[2] + 2,
   },
   cardText: {
     flex: 1,
     fontFamily: Font.body,
     fontSize: Size.base,
     color: C.fgPrimary,
-    lineHeight: 22,
-    marginTop: -1,
+    lineHeight: Size.base * 1.5,
+    marginTop: -2,
   },
   cardTextBlocked: {
     textDecorationLine: 'line-through',
@@ -333,32 +400,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: S[2],
   },
   cardChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: 6,
     flex: 1,
   },
   typeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   typeChipText: {
-    fontFamily: Font.body,
+    fontFamily: Font.bodyMedium,
     fontSize: Size.xs,
   },
   deadlineChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: C.base600,
   },
   deadlineChipText: {
@@ -368,20 +436,25 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
-    gap: S[2],
+    gap: S[1],
   },
   iconBtn: {
-    padding: 4,
-    borderRadius: 6,
+    padding: 6,
+    borderRadius: 8,
   },
   iconBtnActive: {
     backgroundColor: C.base600,
   },
+  iconBtnPressed: {
+    backgroundColor: C.base600,
+    opacity: 0.7,
+  },
   sortCTAWrapper: {
+    position: 'absolute',
+    left: S[5],
+    right: S[5],
     alignItems: 'center',
-    paddingHorizontal: S[5],
-    paddingBottom: S[3],
-    gap: S[1],
+    gap: S[1] + 2,
   },
   sortCTA: {
     flexDirection: 'row',
@@ -389,9 +462,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: S[2],
     backgroundColor: C.gold500,
-    borderRadius: 16,
+    borderRadius: 28,
     paddingVertical: S[4],
-    width: '100%',
+    paddingHorizontal: S[6],
+    minWidth: 200,
+    minHeight: 52,
+    ...Platform.select({
+      ios: {
+        shadowColor: C.gold500,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  sortCTAPressed: {
+    backgroundColor: C.gold400,
+    transform: [{ scale: 0.97 }],
   },
   sortCTAText: {
     fontFamily: Font.bodyMedium,
@@ -412,7 +502,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: S[4],
-    paddingVertical: S[3],
+    paddingTop: S[3],
     gap: S[3],
   },
   input: {
@@ -420,17 +510,22 @@ const styles = StyleSheet.create({
     fontFamily: Font.body,
     fontSize: Size.base,
     color: C.fgPrimary,
-    paddingVertical: S[2],
+    paddingVertical: S[2] + 2,
+    minHeight: 44,
   },
   inputBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: C.gold500,
     alignItems: 'center',
     justifyContent: 'center',
   },
   inputBtnDisabled: {
     backgroundColor: C.base700,
+  },
+  inputBtnPressed: {
+    backgroundColor: C.gold400,
+    transform: [{ scale: 0.93 }],
   },
 });

@@ -6,6 +6,7 @@ import {
   deleteTask,
   updateTask,
 } from '../lib/storage';
+import { scheduleTasks } from '../lib/scheduler';
 
 interface TasksState {
   tasks: Task[];
@@ -17,10 +18,12 @@ interface TasksState {
   addTask: (task: Task) => Promise<void>;
   removeTask: (id: string) => Promise<void>;
   toggleBlocked: (id: string) => Promise<void>;
+  toggleBlockedAndReschedule: (id: string) => Promise<void>;
   setDayPlan: (plan: DayPlan) => void;
+  recomputePlan: () => void;
   setFocusTask: (block: ScheduledBlock | null) => void;
-  markCurrentTaskDone: () => void;
-  clearAll: () => void;
+  markCurrentTaskDone: () => Promise<void>;
+  clearAll: () => Promise<void>;
 }
 
 export const useTaskStore = create<TasksState>((set, get) => ({
@@ -54,19 +57,40 @@ export const useTaskStore = create<TasksState>((set, get) => ({
     }));
   },
 
+  toggleBlockedAndReschedule: async (id) => {
+    const task = get().tasks.find((t) => t.id === id);
+    if (!task) return;
+    const blocked = !task.blocked;
+    await updateTask(id, { blocked });
+    const newTasks = get().tasks.map((t) => (t.id === id ? { ...t, blocked } : t));
+    const newPlan = scheduleTasks(newTasks);
+    set({ tasks: newTasks, dayPlan: newPlan });
+  },
+
   setDayPlan: (plan) => set({ dayPlan: plan }),
+
+  recomputePlan: () => {
+    const newPlan = scheduleTasks(get().tasks);
+    set({ dayPlan: newPlan });
+  },
 
   setFocusTask: (block) => set({ focusTask: block }),
 
-  markCurrentTaskDone: () => {
+  markCurrentTaskDone: async () => {
     const { dayPlan, focusTask } = get();
     if (!dayPlan || !focusTask) return;
+    // Remove the task from storage and tasks array
+    await deleteTask(focusTask.task.id);
+    const newTasks = get().tasks.filter((t) => t.id !== focusTask.task.id);
     const remaining = dayPlan.plan.filter((b) => b.task.id !== focusTask.task.id);
     set({
+      tasks: newTasks,
       dayPlan: { ...dayPlan, plan: remaining },
       focusTask: null,
     });
   },
 
-  clearAll: () => set({ tasks: [], dayPlan: null, focusTask: null }),
+  clearAll: async () => {
+    set({ tasks: [], dayPlan: null, focusTask: null });
+  },
 }));

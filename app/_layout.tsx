@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StyleSheet } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import {
   useFonts,
   CormorantGaramond_400Regular,
@@ -49,10 +51,13 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.base800 } }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(flow)" />
-      </Stack>
+      <KeyboardProvider>
+        <StatusBar style="light" translucent backgroundColor="transparent" />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.base800 } }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(flow)" />
+        </Stack>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

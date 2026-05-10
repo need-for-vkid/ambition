@@ -6,10 +6,13 @@ import Animated, {
   withTiming,
   withDelay,
   withSpring,
+  withRepeat,
+  withSequence,
   Easing,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Defs, RadialGradient, Stop, Circle, Rect } from 'react-native-svg';
 import { useTaskStore } from '../../store/tasks';
 import { scheduleTasks } from '../../lib/scheduler';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
@@ -17,7 +20,7 @@ import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
 import { Task } from '../../types/task';
 
-const MAX_CARDS = 8;
+const MAX_CARDS = 6;
 const PHASES = [
   'Reading your thoughts…',
   'Grouping by intent…',
@@ -25,11 +28,10 @@ const PHASES = [
   'Composing your day.',
 ];
 
-const JITTER_X = [-80, 60, -40, 90, -100, 55, -70, 80];
-const JITTER_Y = [-60, -80, 70, -30, 50, 80, -90, 40];
-const JITTER_R = [-8, 6, -4, 9, -6, 3, -10, 5];
+const JITTER_X = [-90, 70, -50, 100, -110, 60];
+const JITTER_Y = [-70, -90, 80, -40, 60, -80];
+const JITTER_R = [-9, 7, -5, 10, -7, 4];
 
-// Individual card component to isolate hook usage
 function FlyCard({ task, index, startX, startY, startR }: {
   task: Task;
   index: number;
@@ -43,11 +45,11 @@ function FlyCard({ task, index, startX, startY, startR }: {
   const op = useSharedValue(0);
 
   useEffect(() => {
-    const delay = index * 80;
-    op.value = withDelay(delay, withTiming(1, { duration: 200 }));
-    x.value = withDelay(delay, withSpring(0, { damping: 14, stiffness: 90 }));
-    y.value = withDelay(delay, withSpring(0, { damping: 14, stiffness: 90 }));
-    rot.value = withDelay(delay, withSpring(0, { damping: 14, stiffness: 90 }));
+    const delay = 300 + index * 100;
+    op.value = withDelay(delay, withTiming(1, { duration: 250 }));
+    x.value = withDelay(delay, withSpring(0, { damping: 15, stiffness: 95 }));
+    y.value = withDelay(delay, withSpring(0, { damping: 15, stiffness: 95 }));
+    rot.value = withDelay(delay, withSpring(0, { damping: 15, stiffness: 95 }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -75,6 +77,7 @@ export default function SortingScreen() {
   const { tasks, setDayPlan } = useTaskStore();
   const [phaseIdx, setPhaseIdx] = useState(0);
   const progress = useSharedValue(0);
+  const dotScale = useSharedValue(1);
 
   const displayTasks = tasks.filter((t) => !t.blocked).slice(0, MAX_CARDS);
 
@@ -82,15 +85,23 @@ export default function SortingScreen() {
     const plan = scheduleTasks(tasks);
     setDayPlan(plan);
 
-    progress.value = withTiming(1, { duration: 2800, easing: Easing.bezier(0.4, 0, 0.2, 1) });
+    progress.value = withTiming(1, { duration: 3000, easing: Easing.bezier(0.4, 0, 0.2, 1) });
+    dotScale.value = withRepeat(
+      withSequence(
+        withTiming(1.4, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) })
+      ),
+      -1,
+      false
+    );
 
-    const phaseTimers = [0, 700, 1400, 2100].map((t, idx) =>
+    const phaseTimers = [0, 750, 1500, 2250].map((t, idx) =>
       setTimeout(() => setPhaseIdx(idx), t)
     );
 
     const navTimer = setTimeout(() => {
       router.replace('/(flow)/today');
-    }, 3100);
+    }, 3300);
 
     return () => {
       phaseTimers.forEach(clearTimeout);
@@ -103,46 +114,63 @@ export default function SortingScreen() {
     width: `${progress.value * 100}%`,
   }));
 
+  const dotStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: dotScale.value }],
+  }));
+
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <View style={styles.aiDot} />
-        <Text style={styles.headerLabel}>Composing your day</Text>
-      </View>
+    <View style={styles.root}>
+      {/* Background gradient */}
+      <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+        <Defs>
+          <RadialGradient id="sortBg" cx="50%" cy="40%" r="80%">
+            <Stop offset="0" stopColor={C.base700} stopOpacity="1" />
+            <Stop offset="1" stopColor={C.base900} stopOpacity="1" />
+          </RadialGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill="url(#sortBg)" />
+      </Svg>
 
-      <View style={styles.cardsArea}>
-        {displayTasks.map((task, i) => (
-          <FlyCard
-            key={task.id}
-            task={task}
-            index={i}
-            startX={JITTER_X[i % JITTER_X.length]}
-            startY={JITTER_Y[i % JITTER_Y.length]}
-            startR={JITTER_R[i % JITTER_R.length]}
-          />
-        ))}
-      </View>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <Animated.View style={[styles.aiDot, dotStyle]} />
+          <Text style={styles.headerLabel}>Composing your day</Text>
+        </View>
 
-      <Text style={styles.phase}>{PHASES[phaseIdx]}</Text>
+        <View style={styles.cardsArea}>
+          {displayTasks.map((task, i) => (
+            <FlyCard
+              key={task.id}
+              task={task}
+              index={i}
+              startX={JITTER_X[i % JITTER_X.length]}
+              startY={JITTER_Y[i % JITTER_Y.length]}
+              startR={JITTER_R[i % JITTER_R.length]}
+            />
+          ))}
+        </View>
 
-      <View style={styles.progressTrack}>
-        <Animated.View style={[styles.progressBar, progressStyle]} />
-      </View>
-    </SafeAreaView>
+        <Text style={styles.phase}>{PHASES[phaseIdx]}</Text>
+
+        <View style={styles.progressTrack}>
+          <Animated.View style={[styles.progressBar, progressStyle]} />
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  root: { flex: 1, backgroundColor: C.base900 },
+  safe: {
     flex: 1,
-    backgroundColor: C.base900,
     paddingHorizontal: S[5],
     justifyContent: 'space-between',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S[2],
+    gap: S[2] + 2,
     paddingTop: S[4],
   },
   aiDot: {
@@ -153,26 +181,26 @@ const styles = StyleSheet.create({
   },
   headerLabel: {
     fontFamily: Font.bodyMedium,
-    fontSize: Size.sm,
-    color: C.fgTertiary,
+    fontSize: Size.xs,
+    color: C.gold400,
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 2,
   },
   cardsArea: {
     flex: 1,
     justifyContent: 'center',
-    gap: S[2],
+    gap: S[2] + 2,
     paddingVertical: S[8],
   },
   flyCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: C.base800,
-    borderRadius: 10,
-    padding: S[3],
+    borderRadius: 12,
+    padding: S[3] + 2,
     borderWidth: 1,
     borderColor: C.borderDefault,
-    gap: S[2],
+    gap: S[3],
   },
   flyCardAccent: {
     width: 3,
@@ -190,7 +218,7 @@ const styles = StyleSheet.create({
     fontSize: Size.xl,
     color: C.fgSecondary,
     textAlign: 'center',
-    paddingBottom: S[4],
+    paddingBottom: S[5],
   },
   progressTrack: {
     height: 3,
