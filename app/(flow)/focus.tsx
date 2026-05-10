@@ -7,10 +7,10 @@ import {
   TextInput,
   ScrollView,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import Svg, { Circle, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { X, Pause, Play, Check } from 'lucide-react-native';
@@ -107,11 +107,14 @@ export default function FocusScreen() {
       </Svg>
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAwareScrollView
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+        <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          bottomOffset={20}
         >
           {/* Top bar */}
           <View style={styles.topBar}>
@@ -230,7 +233,8 @@ export default function FocusScreen() {
               <Text style={styles.doneBtnText}>Mark done</Text>
             </Pressable>
           </View>
-        </KeyboardAwareScrollView>
+        </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );

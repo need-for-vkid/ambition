@@ -7,10 +7,10 @@ import {
   Pressable,
   ScrollView,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -165,8 +165,11 @@ export default function DumpScreen() {
         </Animated.View>
       )}
 
-      {/* Input bar — sticks to keyboard */}
-      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+      {/* Input bar — uses KeyboardAvoidingView for iOS; Android handles via adjustResize */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+      >
         <View style={[styles.inputSafe, { paddingBottom: insets.bottom || 12 }]}>
           <View style={styles.inputRow}>
             <TextInput
@@ -195,7 +198,7 @@ export default function DumpScreen() {
             </Pressable>
           </View>
         </View>
-      </KeyboardStickyView>
+      </KeyboardAvoidingView>
 
       {/* TaskEvalSheet */}
       {sheetOpen && (
