@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -27,11 +27,13 @@ import {
   Sparkles,
   Utensils,
   RotateCcw,
+  Plus,
 } from 'lucide-react-native';
 import { useTaskStore } from '../../store/tasks';
 import { ScheduledBlock, WorkType } from '../../types/task';
 import { planSummary } from '../../lib/scheduler';
 import { DayModePill } from '../../components/atoms/DayModePill';
+import { AddToTodaySheet } from '../../components/AddToTodaySheet';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
@@ -72,6 +74,8 @@ export default function TodayScreen() {
     toggleBlockedAndReschedule,
     setFocusTask,
   } = useTaskStore();
+
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   const plan = dayPlan?.plan ?? [];
   const deferred = dayPlan?.deferred ?? [];
@@ -238,6 +242,22 @@ export default function TodayScreen() {
             </View>
           )}
 
+          {/* Add to day */}
+          {plan.length > 0 && (
+            <Pressable
+              style={({ pressed }) => [styles.addToDayBtn, pressed && styles.addToDayBtnPressed]}
+              onPress={() => {
+                impact();
+                setAddSheetOpen(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Add task to today"
+            >
+              <Plus size={16} color={C.gold400} />
+              <Text style={styles.addToDayText}>Add task to today</Text>
+            </Pressable>
+          )}
+
           {/* Deferred */}
           {deferred.length > 0 && (
             <View style={styles.deferred}>
@@ -258,6 +278,10 @@ export default function TodayScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
+
+      {addSheetOpen && (
+        <AddToTodaySheet onClose={() => setAddSheetOpen(false)} />
+      )}
     </View>
   );
 }
@@ -722,6 +746,30 @@ const styles = StyleSheet.create({
     fontFamily: Font.bodyMedium,
     fontSize: Size.base,
     color: C.base900,
+  },
+  addToDayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S[2],
+    marginHorizontal: S[5],
+    marginTop: S[5],
+    paddingVertical: S[3] + 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.borderGold,
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+    minHeight: 48,
+  },
+  addToDayBtnPressed: {
+    backgroundColor: 'rgba(201,162,39,0.08)',
+  },
+  addToDayText: {
+    fontFamily: Font.bodyMedium,
+    fontSize: Size.sm,
+    color: C.gold400,
+    letterSpacing: 0.3,
   },
   deferred: {
     marginHorizontal: S[5],
