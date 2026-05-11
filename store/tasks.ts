@@ -14,6 +14,7 @@ import {
   setLastPlanDate,
 } from '../lib/storage';
 import { scheduleTasks } from '../lib/scheduler';
+import { syncTaskNotifications } from '../lib/notifications';
 
 interface TasksState {
   tasks: Task[];
@@ -95,6 +96,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
       dayMode,
       isLoaded: true,
     });
+    void syncTaskNotifications(plan.plan);
   },
 
   addTask: async (task) => {
@@ -128,6 +130,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
       forcedIds: get().forcedTodayIds,
     });
     set({ tasks: newTasks, dayPlan: newPlan });
+    void syncTaskNotifications(newPlan.plan);
   },
 
   setDayPlan: (plan) => set({ dayPlan: plan }),
@@ -138,6 +141,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
       forcedIds: get().forcedTodayIds,
     });
     set({ dayPlan: newPlan });
+    void syncTaskNotifications(newPlan.plan);
   },
 
   setFocusTask: (block) => set({ focusTask: block }),
@@ -172,6 +176,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
       forcedIds: get().forcedTodayIds,
     });
     set({ dayMode: mode, dayPlan: newPlan });
+    void syncTaskNotifications(newPlan.plan);
   },
 
   addToToday: (id) => {
@@ -182,6 +187,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
       forcedIds: forced,
     });
     set({ forcedTodayIds: forced, dayPlan: newPlan });
+    void syncTaskNotifications(newPlan.plan);
   },
 
   removeFromToday: (id) => {
@@ -192,6 +198,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
       forcedIds: forced,
     });
     set({ forcedTodayIds: forced, dayPlan: newPlan });
+    void syncTaskNotifications(newPlan.plan);
   },
 
   restoreCompletedTask: async (id) => {
@@ -216,6 +223,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
       dayPlan: newPlan,
       completed: get().completed.filter((c) => c.id !== id),
     });
+    void syncTaskNotifications(newPlan.plan);
   },
 
   loadCompleted: async () => {
