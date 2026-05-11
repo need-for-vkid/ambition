@@ -109,6 +109,13 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
   const [deadlinePreset, setDeadlinePreset] = useState<DeadlineLabel>(null);
   const [customDeadline, setCustomDeadline] = useState<Date | null>(null);
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
+  const [deadlineTimeEnabled, setDeadlineTimeEnabled] = useState(false);
+  const [deadlineTimeValue, setDeadlineTimeValue] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(17, 0, 0, 0);
+    return d;
+  });
+  const [showDeadlineTimePicker, setShowDeadlineTimePicker] = useState(false);
 
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [schedDate, setSchedDate] = useState<Date>(new Date());
@@ -126,9 +133,13 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
 
     let deadline: string | null = null;
     let deadlineLabel: DeadlineLabel = null;
+    let deadlineTime: string | null = null;
     if (customDeadline) {
       deadline = customDeadline.toISOString();
       deadlineLabel = deadlineLabelFromDate(customDeadline);
+      if (deadlineTimeEnabled) {
+        deadlineTime = formatTime(deadlineTimeValue);
+      }
     } else if (deadlinePreset) {
       const preset = DEADLINE_PRESETS.find((p) => p.value === deadlinePreset);
       if (preset) {
@@ -145,14 +156,16 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
       durationMins: dur && !isNaN(dur) ? dur : null,
       deadlineLabel,
       deadline,
+      deadlineTime,
       scheduledDate: scheduleEnabled ? schedDate.toISOString().slice(0, 10) : null,
       scheduledTime: scheduleEnabled ? formatTime(schedTime) : null,
       blocked: false,
       createdAt: new Date().toISOString(),
+      carryOverCount: 0,
     };
     impact(Haptics.ImpactFeedbackStyle.Medium);
     onAdd(task);
-  }, [importance, workType, deadlinePreset, customDeadline, durationStr, scheduleEnabled, schedDate, schedTime, pendingText, onAdd]);
+  }, [importance, workType, deadlinePreset, customDeadline, deadlineTimeEnabled, deadlineTimeValue, durationStr, scheduleEnabled, schedDate, schedTime, pendingText, onAdd]);
 
   const durationPlaceholder = workType
     ? `${DURATION_DEFAULTS[workType]} min (default)`
@@ -164,6 +177,14 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
     if (event.type === 'set' && date) {
       setCustomDeadline(date);
       setDeadlinePreset(null);
+      impact();
+    }
+  };
+
+  const onDeadlineTimePicked = (event: DateTimePickerEvent, date?: Date) => {
+    setShowDeadlineTimePicker(Platform.OS === 'ios');
+    if (event.type === 'set' && date) {
+      setDeadlineTimeValue(date);
       impact();
     }
   };
@@ -350,6 +371,52 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={onDeadlinePicked}
             minimumDate={new Date()}
+            themeVariant="dark"
+          />
+        )}
+
+        {customDeadline && (
+          <View style={styles.deadlineTimeWrap}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.toggleRow,
+                deadlineTimeEnabled && styles.toggleRowActive,
+                pressed && styles.cardPressed,
+              ]}
+              onPress={() => {
+                impact();
+                setDeadlineTimeEnabled(!deadlineTimeEnabled);
+              }}
+            >
+              <Clock size={14} color={deadlineTimeEnabled ? C.gold400 : C.fgSecondary} />
+              <Text style={[styles.toggleLabel, deadlineTimeEnabled && styles.toggleLabelActive]}>
+                {deadlineTimeEnabled ? 'Due by specific hour' : 'Set specific hour'}
+              </Text>
+              <View style={[styles.toggleSwitch, deadlineTimeEnabled && styles.toggleSwitchActive]}>
+                <View style={[styles.toggleKnob, deadlineTimeEnabled && styles.toggleKnobActive]} />
+              </View>
+            </Pressable>
+            {deadlineTimeEnabled && (
+              <Pressable
+                style={({ pressed }) => [styles.schedField, pressed && styles.cardPressed, { marginTop: S[2] }]}
+                onPress={() => {
+                  impact();
+                  setShowDeadlineTimePicker(true);
+                }}
+              >
+                <Clock size={14} color={C.gold400} />
+                <Text style={styles.schedFieldText}>{formatTime(deadlineTimeValue)}</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+        {showDeadlineTimePicker && (
+          <DateTimePicker
+            value={deadlineTimeValue}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onDeadlineTimePicked}
+            is24Hour={true}
             themeVariant="dark"
           />
         )}
@@ -678,6 +745,9 @@ const styles = StyleSheet.create({
   schedFields: {
     flexDirection: 'row',
     gap: S[2],
+    marginTop: S[2],
+  },
+  deadlineTimeWrap: {
     marginTop: S[2],
   },
   schedField: {

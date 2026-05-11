@@ -16,7 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import {
-  Bell,
+  Archive,
   Ban,
   ChevronRight,
   Brain,
@@ -25,11 +25,13 @@ import {
   Dumbbell,
   ClipboardList,
   Sparkles,
+  Utensils,
   RotateCcw,
 } from 'lucide-react-native';
 import { useTaskStore } from '../../store/tasks';
 import { ScheduledBlock, WorkType } from '../../types/task';
 import { planSummary } from '../../lib/scheduler';
+import { DayModePill } from '../../components/atoms/DayModePill';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
@@ -62,16 +64,24 @@ function formatHours(mins: number): string {
 
 export default function TodayScreen() {
   const router = useRouter();
-  const { tasks, dayPlan, toggleBlockedAndReschedule, setFocusTask } = useTaskStore();
+  const {
+    tasks,
+    dayPlan,
+    dayMode,
+    setDayMode,
+    toggleBlockedAndReschedule,
+    setFocusTask,
+  } = useTaskStore();
 
   const plan = dayPlan?.plan ?? [];
   const deferred = dayPlan?.deferred ?? [];
   const summary = useMemo(
-    () => (dayPlan ? planSummary(dayPlan, tasks) : null),
-    [dayPlan, tasks]
+    () => (dayPlan ? planSummary(dayPlan, tasks, new Date(), dayMode) : null),
+    [dayPlan, tasks, dayMode]
   );
 
-  const firstUnblocked = plan.find((b) => !b.task.blocked);
+  const taskBlocks = plan.filter((b) => b.kind !== 'lunch');
+  const firstUnblocked = taskBlocks.find((b) => !b.task.blocked);
 
   const handleStartTask = useCallback(
     (block: ScheduledBlock) => {
@@ -91,13 +101,12 @@ export default function TodayScreen() {
   );
 
   const aiSummary = useMemo(() => {
-    if (!summary || plan.length === 0) {
+    if (!summary || taskBlocks.length === 0) {
       return 'No tasks scheduled. Head back to dump new thoughts.';
     }
-    const deep = plan.filter((b) => b.task.workType === 'deep');
-    const social = plan.filter((b) => b.task.workType === 'social');
-    const admin = plan.filter((b) => b.task.workType === 'admin');
-    const morning = plan.filter((b) => parseInt(b.startTime, 10) < 12);
+    const deep = taskBlocks.filter((b) => b.task.workType === 'deep');
+    const admin = taskBlocks.filter((b) => b.task.workType === 'admin');
+    const morning = taskBlocks.filter((b) => parseInt(b.startTime, 10) < 12);
 
     if (summary.criticalCount > 0) {
       return `${summary.criticalCount} urgent task${summary.criticalCount > 1 ? 's' : ''} today. Lead with the most pressing.`;
@@ -109,7 +118,7 @@ export default function TodayScreen() {
       return `${deep.length} deep block${deep.length > 1 ? 's' : ''}, then ${admin.length} admin task${admin.length > 1 ? 's' : ''} to clear the backlog.`;
     }
     return "A balanced day. Trust the order — it's already optimal.";
-  }, [plan, summary]);
+  }, [taskBlocks, summary]);
 
   return (
     <View style={styles.root}>
@@ -122,10 +131,14 @@ export default function TodayScreen() {
           </View>
           <Pressable
             style={({ pressed }) => [styles.bellBtn, pressed && styles.bellBtnPressed]}
+            onPress={() => {
+              impact();
+              router.push('/(flow)/history');
+            }}
             accessibilityRole="button"
-            accessibilityLabel="Notifications"
+            accessibilityLabel="Open archive"
           >
-            <Bell size={18} color={C.fgSecondary} />
+            <Archive size={18} color={C.fgSecondary} />
           </Pressable>
         </View>
 
@@ -134,6 +147,11 @@ export default function TodayScreen() {
           style={styles.scroll}
           contentContainerStyle={{ paddingBottom: S[8] }}
         >
+          {/* Day Mode pill */}
+          <View style={styles.dayModeWrap}>
+            <DayModePill value={dayMode} onChange={setDayMode} />
+          </View>
+
           {/* AI summary card */}
           <View style={styles.summaryCard}>
             <View style={styles.summaryHeader}>
@@ -141,7 +159,7 @@ export default function TodayScreen() {
               <Text style={styles.summaryEyebrow}>AI plan</Text>
             </View>
             <Text style={styles.summaryText}>{aiSummary}</Text>
-            {summary && plan.length > 0 && (
+            {summary && taskBlocks.length > 0 && (
               <Text style={styles.summaryMeta}>
                 {summary.scheduledCount} on the plan
                 {summary.deferredCount > 0 ? ` · ${summary.deferredCount} deferred` : ''}
@@ -153,10 +171,13 @@ export default function TodayScreen() {
           {summary && (
             <View style={styles.statsRow}>
               <Stat label="TASKS" value={String(summary.totalTasks)} />
-              <Stat label="FOCUS" value={summary.totalFocusMins > 0 ? formatHours(summary.totalFocusMins) : '—'} />
               <Stat
-                label={`OF ${summary.totalTasks}`}
-                value="0"
+                label="FOCUS"
+                value={summary.totalFocusMins > 0 ? formatHours(summary.totalFocusMins) : '—'}
+              />
+              <Stat
+                label="OF"
+                value={formatHours(summary.capacityMins)}
                 subtle
               />
             </View>
@@ -197,17 +218,21 @@ export default function TodayScreen() {
             <View style={styles.schedule}>
               {plan.map((block) => (
                 <Animated.View
-                  key={block.task.id}
+                  key={block.task.id + block.startTime}
                   layout={LinearTransition.springify().damping(18)}
                   entering={FadeIn.duration(220)}
                   exiting={FadeOut.duration(180)}
                 >
-                  <ScheduleBlock
-                    block={block}
-                    isFirst={block === firstUnblocked}
-                    onStart={() => handleStartTask(block)}
-                    onToggleBlocked={() => handleToggleBlocked(block.task.id)}
-                  />
+                  {block.kind === 'lunch' ? (
+                    <LunchBlock startTime={block.startTime} duration={block.durationMins} />
+                  ) : (
+                    <ScheduleBlock
+                      block={block}
+                      isFirst={block === firstUnblocked}
+                      onStart={() => handleStartTask(block)}
+                      onToggleBlocked={() => handleToggleBlocked(block.task.id)}
+                    />
+                  )}
                 </Animated.View>
               ))}
             </View>
@@ -221,6 +246,12 @@ export default function TodayScreen() {
                 <View key={task.id} style={styles.deferredItem}>
                   <View style={[styles.deferredDot, { backgroundColor: WORK_TYPE_COLORS[task.workType] }]} />
                   <Text style={styles.deferredText}>{task.text}</Text>
+                  {task.carryOverCount && task.carryOverCount > 0 ? (
+                    <View style={styles.carryBadge}>
+                      <RotateCcw size={9} color={C.fgTertiary} />
+                      <Text style={styles.carryBadgeText}>{task.carryOverCount}</Text>
+                    </View>
+                  ) : null}
                 </View>
               ))}
             </View>
@@ -292,6 +323,17 @@ function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps)
           </View>
           <Text style={styles.blockMetaSep}>·</Text>
           <Text style={styles.blockDuration}>{durStr}</Text>
+          {task.carryOverCount && task.carryOverCount > 0 ? (
+            <>
+              <Text style={styles.blockMetaSep}>·</Text>
+              <View style={styles.carryInline}>
+                <RotateCcw size={9} color={C.fgTertiary} />
+                <Text style={styles.carryInlineText}>
+                  {task.carryOverCount === 1 ? 'from yesterday' : `deferred ${task.carryOverCount}×`}
+                </Text>
+              </View>
+            </>
+          ) : null}
         </View>
       </View>
 
@@ -314,6 +356,21 @@ function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps)
         )}
       </View>
     </Pressable>
+  );
+}
+
+function LunchBlock({ startTime, duration }: { startTime: string; duration: number }) {
+  return (
+    <View style={styles.lunchBlock}>
+      <View style={styles.lunchTimeCol}>
+        <Text style={styles.lunchTime}>{startTime}</Text>
+      </View>
+      <View style={styles.lunchContent}>
+        <Utensils size={13} color={C.fgTertiary} />
+        <Text style={styles.lunchText}>Lunch</Text>
+        <Text style={styles.lunchDuration}>{duration}m</Text>
+      </View>
+    </View>
   );
 }
 
@@ -361,6 +418,10 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+  },
+  dayModeWrap: {
+    paddingHorizontal: S[5],
+    marginBottom: S[3],
   },
   summaryCard: {
     marginHorizontal: S[5],
@@ -524,6 +585,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+    flexWrap: 'wrap',
   },
   blockTypeBadge: {
     flexDirection: 'row',
@@ -545,6 +607,17 @@ const styles = StyleSheet.create({
     fontFamily: Font.body,
     fontSize: Size.xs,
     color: C.fgTertiary,
+  },
+  carryInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  carryInlineText: {
+    fontFamily: Font.body,
+    fontSize: Size.xs,
+    color: C.fgTertiary,
+    fontStyle: 'italic',
   },
   blockRight: {
     minWidth: 56,
@@ -573,6 +646,47 @@ const styles = StyleSheet.create({
   },
   banBtnPressed: {
     backgroundColor: C.base600,
+  },
+  lunchBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.borderSubtle,
+    borderStyle: 'dashed',
+    paddingVertical: S[2] + 2,
+    paddingHorizontal: S[2],
+    gap: S[2] + 2,
+    minHeight: 40,
+  },
+  lunchTimeCol: {
+    width: 40,
+    alignItems: 'center',
+  },
+  lunchTime: {
+    fontFamily: Font.mono,
+    fontSize: Size.xs,
+    color: C.fgTertiary,
+    letterSpacing: 0.5,
+  },
+  lunchContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[2],
+  },
+  lunchText: {
+    flex: 1,
+    fontFamily: Font.body,
+    fontSize: Size.sm,
+    color: C.fgTertiary,
+    fontStyle: 'italic',
+  },
+  lunchDuration: {
+    fontFamily: Font.body,
+    fontSize: Size.xs,
+    color: C.fgTertiary,
   },
   emptyPlan: {
     alignItems: 'center',
@@ -642,5 +756,19 @@ const styles = StyleSheet.create({
     fontSize: Size.sm,
     color: C.fgTertiary,
     flex: 1,
+  },
+  carryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    backgroundColor: C.base600,
+    borderRadius: 6,
+  },
+  carryBadgeText: {
+    fontFamily: Font.mono,
+    fontSize: 10,
+    color: C.fgTertiary,
   },
 });

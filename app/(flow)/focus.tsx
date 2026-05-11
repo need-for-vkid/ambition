@@ -43,6 +43,31 @@ export default function FocusScreen() {
   const task = focusTask?.task;
   const workColor = task ? WORK_TYPE_COLORS[task.workType] : C.gold500;
 
+  const whyNowText: string | null = (() => {
+    const reason = focusTask?.reason;
+    if (!reason) return null;
+    switch (reason.type) {
+      case 'peak_window':
+        return `${task?.workType ?? ''} — your peak window`;
+      case 'urgent_hours':
+        return reason.hoursLeft <= 0
+          ? 'Due now'
+          : `Due in ${reason.hoursLeft}h`;
+      case 'overdue':
+        return 'Overdue — clear it first';
+      case 'carry_over':
+        return reason.days === 1
+          ? 'Carried from yesterday'
+          : `Carried ${reason.days} days`;
+      case 'high_importance':
+        return 'High importance — done first';
+      case 'forced':
+        return 'You pinned this for today';
+      default:
+        return null;
+    }
+  })();
+
   useEffect(() => {
     if (running) {
       intervalRef.current = setInterval(() => {
@@ -73,9 +98,12 @@ export default function FocusScreen() {
   const handleDone = useCallback(async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     impact(Haptics.ImpactFeedbackStyle.Heavy);
-    await markCurrentTaskDone();
+    await markCurrentTaskDone({
+      notes: notes.trim() || undefined,
+      pomosCount: completedPomos,
+    });
     router.replace('/(flow)/done');
-  }, [markCurrentTaskDone, router]);
+  }, [markCurrentTaskDone, notes, completedPomos, router]);
 
   const handleAbandon = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -140,6 +168,9 @@ export default function FocusScreen() {
               <Text style={[styles.workTypeText, { color: workColor }]}>{task.workType}</Text>
             </View>
             <Text style={styles.taskTitle}>{task.text}</Text>
+            {whyNowText && (
+              <Text style={styles.whyNow}>{whyNowText}</Text>
+            )}
           </View>
 
           {/* Ring timer */}
@@ -307,6 +338,15 @@ const styles = StyleSheet.create({
     color: C.fgPrimary,
     textAlign: 'center',
     lineHeight: (Size.xl + 2) * 1.25,
+  },
+  whyNow: {
+    fontFamily: Font.body,
+    fontSize: Size.xs,
+    color: C.fgTertiary,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 2,
+    letterSpacing: 0.3,
   },
   ringWrapper: {
     width: 260,
