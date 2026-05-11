@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Task, DayPlan, ScheduledBlock, DayMode, CompletedTask } from '../types/task';
+import { Task, DayPlan, ScheduledBlock, DayMode, CompletedTask, DaySummary } from '../types/task';
 import {
   loadTasks,
   saveTask,
@@ -12,6 +12,8 @@ import {
   setDayMode as setDayModeInDb,
   getLastPlanDate,
   setLastPlanDate,
+  saveDaySummary as saveDaySummaryInDb,
+  loadDaySummaries as loadDaySummariesFromDb,
 } from '../lib/storage';
 import { scheduleTasks } from '../lib/scheduler';
 import { syncTaskNotifications } from '../lib/notifications';
@@ -24,11 +26,13 @@ interface TasksState {
   dayMode: DayMode;
   forcedTodayIds: Set<string>;
   completed: CompletedTask[];
+  daySummaries: DaySummary[];
   planningTomorrow: boolean;
 
   hydrate: () => Promise<void>;
   addTask: (task: Task) => Promise<void>;
   removeTask: (id: string) => Promise<void>;
+  updateTaskFields: (task: Task) => Promise<void>;
   toggleBlocked: (id: string) => Promise<void>;
   toggleBlockedAndReschedule: (id: string) => Promise<void>;
   setDayPlan: (plan: DayPlan) => void;
@@ -42,6 +46,8 @@ interface TasksState {
   loadCompleted: () => Promise<void>;
   clearAll: () => Promise<void>;
   setPlanningTomorrow: (val: boolean) => void;
+  loadDaySummaries: () => Promise<void>;
+  saveDaySummary: (summary: DaySummary) => Promise<void>;
 }
 
 function todayDate(): string {
@@ -56,6 +62,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
   dayMode: 'normal',
   forcedTodayIds: new Set<string>(),
   completed: [],
+  daySummaries: [],
   planningTomorrow: false,
 
   hydrate: async () => {
@@ -106,12 +113,15 @@ export const useTaskStore = create<TasksState>((set, get) => ({
       plan = scheduleTasks(mutatedTasks, { dayMode, now, planningTomorrow: true });
     }
 
+    const summaries = await loadDaySummariesFromDb();
+
     set({
       tasks: mutatedTasks,
       dayPlan: plan,
       dayMode,
       isLoaded: true,
       planningTomorrow,
+      daySummaries: summaries,
     });
     void syncTaskNotifications(plan.plan);
   },
@@ -124,6 +134,30 @@ export const useTaskStore = create<TasksState>((set, get) => ({
   removeTask: async (id) => {
     await deleteTask(id);
     set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }));
+  },
+
+  updateTaskFields: async (task) => {
+    // Persist the full set of editable fields, then reschedule so changes appear in plan.
+    await updateTask(task.id, {
+      text: task.text,
+      importance: task.importance,
+      workType: task.workType,
+      durationMins: task.durationMins,
+      deadlineLabel: task.deadlineLabel,
+      deadline: task.deadline,
+      deadlineTime: task.deadlineTime,
+      scheduledDate: task.scheduledDate,
+      scheduledTime: task.scheduledTime,
+    });
+    const newTasks = get().tasks.map((t) => (t.id === task.id ? task : t));
+    const newPlan = scheduleTasks(newTasks, {
+      dayMode: get().dayMode,
+      forcedIds: get().forcedTodayIds,
+      now: new Date(),
+      planningTomorrow: get().planningTomorrow,
+    });
+    set({ tasks: newTasks, dayPlan: newPlan });
+    void syncTaskNotifications(newPlan.plan);
   },
 
   toggleBlocked: async (id) => {
@@ -262,6 +296,17 @@ export const useTaskStore = create<TasksState>((set, get) => ({
 
   clearAll: async () => {
     set({ tasks: [], dayPlan: null, focusTask: null, forcedTodayIds: new Set(), completed: [] });
+  },
+
+  loadDaySummaries: async () => {
+    const summaries = await loadDaySummariesFromDb();
+    set({ daySummaries: summaries });
+  },
+
+  saveDaySummary: async (summary) => {
+    await saveDaySummaryInDb(summary);
+    const summaries = await loadDaySummariesFromDb();
+    set({ daySummaries: summaries });
   },
 
   setPlanningTomorrow: (val) => {

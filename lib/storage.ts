@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { Task, CompletedTask, DayMode } from '../types/task';
+import { Task, CompletedTask, DayMode, DaySummary, Mood } from '../types/task';
 
 // Cache the in-flight promise so concurrent callers all await the same
 // initialization. Caching the result alone would race: when two flows hit
@@ -7,7 +7,7 @@ import { Task, CompletedTask, DayMode } from '../types/task';
 // own openDatabaseAsync, both run migrations, and one handle ends up broken.
 let _dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (_dbPromise) return _dbPromise;
@@ -39,6 +39,16 @@ function getDb(): Promise<SQLite.SQLiteDatabase> {
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS day_summaries (
+        date TEXT PRIMARY KEY,
+        mood TEXT,
+        note TEXT,
+        tasks_completed INTEGER NOT NULL DEFAULT 0,
+        tasks_planned INTEGER NOT NULL DEFAULT 0,
+        focus_mins INTEGER NOT NULL DEFAULT 0,
+        deep_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
       );
     `);
 
@@ -221,4 +231,55 @@ export async function getLastPlanDate(): Promise<string | null> {
 
 export async function setLastPlanDate(isoDate: string): Promise<void> {
   await setSetting('last_plan_date', isoDate);
+}
+
+// === Day summaries ===
+
+function rowToDaySummary(row: Record<string, unknown>): DaySummary {
+  return {
+    date: row.date as string,
+    mood: (row.mood as Mood | null) ?? null,
+    note: (row.note as string | null) ?? null,
+    tasksCompleted: (row.tasks_completed as number) ?? 0,
+    tasksPlanned: (row.tasks_planned as number) ?? 0,
+    focusMins: (row.focus_mins as number) ?? 0,
+    deepCount: (row.deep_count as number) ?? 0,
+    createdAt: row.created_at as string,
+  };
+}
+
+export async function saveDaySummary(summary: DaySummary): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO day_summaries
+     (date, mood, note, tasks_completed, tasks_planned, focus_mins, deep_count, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      summary.date,
+      summary.mood,
+      summary.note,
+      summary.tasksCompleted,
+      summary.tasksPlanned,
+      summary.focusMins,
+      summary.deepCount,
+      summary.createdAt,
+    ]
+  );
+}
+
+export async function loadDaySummaries(): Promise<DaySummary[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM day_summaries ORDER BY date DESC'
+  );
+  return rows.map(rowToDaySummary);
+}
+
+export async function getDaySummary(date: string): Promise<DaySummary | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM day_summaries WHERE date = ?',
+    [date]
+  );
+  return row ? rowToDaySummary(row) : null;
 }

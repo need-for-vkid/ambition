@@ -60,9 +60,10 @@ export default function DumpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tr = useT();
-  const { tasks, addTask, removeTask, toggleBlocked, recomputePlan } = useTaskStore();
+  const { tasks, addTask, removeTask, toggleBlocked, recomputePlan, updateTaskFields } = useTaskStore();
   const [inputText, setInputText] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [sortMode, setSortMode] = useState<'default' | 'priority'>('default');
 
@@ -192,6 +193,10 @@ export default function DumpScreen() {
                 task={task}
                 jitter={sortMode === 'priority' ? 0 : JITTER[i % JITTER.length]}
                 rank={sortMode === 'priority' && !task.blocked ? i + 1 : undefined}
+                onEdit={() => {
+                  impact();
+                  setEditingTask(task);
+                }}
                 onRemove={() => {
                   impact();
                   removeTask(task.id);
@@ -267,12 +272,25 @@ export default function DumpScreen() {
         </View>
       </View>
 
-      {/* TaskEvalSheet */}
-      {sheetOpen && (
+      {/* TaskEvalSheet — new task */}
+      {sheetOpen && !editingTask && (
         <TaskEvalSheet
           pendingText={inputText.trim()}
           onAdd={handleAddTask}
           onClose={() => setSheetOpen(false)}
+        />
+      )}
+
+      {/* TaskEvalSheet — editing existing task */}
+      {editingTask && (
+        <TaskEvalSheet
+          pendingText=""
+          existingTask={editingTask}
+          onUpdate={(updated) => {
+            updateTaskFields(updated);
+            setEditingTask(null);
+          }}
+          onClose={() => setEditingTask(null)}
         />
       )}
     </View>
@@ -283,20 +301,25 @@ interface CardProps {
   task: Task;
   jitter: number;
   rank?: number;
+  onEdit: () => void;
   onRemove: () => void;
   onToggleBlocked: () => void;
 }
 
-function TaskCard({ task, jitter, rank, onRemove, onToggleBlocked }: CardProps) {
+function TaskCard({ task, jitter, rank, onEdit, onRemove, onToggleBlocked }: CardProps) {
   const WorkIcon = WORK_TYPE_ICONS[task.workType];
   const workColor = WORK_TYPE_COLORS[task.workType];
 
   return (
-    <View
-      style={[
+    <Pressable
+      onPress={onEdit}
+      accessibilityRole="button"
+      accessibilityLabel="Edit task"
+      style={({ pressed }) => [
         styles.card,
         task.blocked && styles.cardBlocked,
         { transform: [{ rotate: `${jitter}deg` }] },
+        pressed && { opacity: 0.85 },
       ]}
     >
       <View style={styles.cardLeft}>
@@ -357,7 +380,7 @@ function TaskCard({ task, jitter, rank, onRemove, onToggleBlocked }: CardProps) 
           </Pressable>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

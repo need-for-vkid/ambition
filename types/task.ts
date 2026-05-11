@@ -47,3 +47,16 @@ export interface CompletedTask {
   pomosCount: number;
   notes: string | null;
 }
+
+export type Mood = 'great' | 'steady' | 'heavy';
+
+export interface DaySummary {
+  date: string;                   // YYYY-MM-DD
+  mood: Mood | null;
+  note: string | null;
+  tasksCompleted: number;
+  tasksPlanned: number;           // total tasks scheduled today (for "4 of 5 done")
+  focusMins: number;
+  deepCount: number;              // deep-work tasks completed
+  createdAt: string;
+}

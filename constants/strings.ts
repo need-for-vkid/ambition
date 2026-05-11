@@ -35,6 +35,9 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     'today.back_to_backlog': 'Back to backlog',
     'today.from_yesterday': 'from yesterday',
     'today.deferred_x': 'deferred',
+    'today.finish_day': 'Finish day',
+    'today.finish_day_ready': 'Day complete — close it out',
+    'today.finish_day_pending': 'Finish day',
 
     // Focus screen
     'focus.title': 'Focus',
@@ -89,6 +92,7 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
 
     // TaskEvalSheet
     'task.adding': 'Adding',
+    'task.editing': 'Editing',
     'task.priority': 'Priority',
     'task.required': '*',
     'task.optional': 'optional',
@@ -98,6 +102,9 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     'task.schedule': 'Schedule',
     'task.schedule_hint': 'optional — pin to specific date & time',
     'task.add': 'Add task',
+    'task.save': 'Save changes',
+    'task.min': 'min',
+    'task.duration_default': 'default',
     'task.set_hour': 'Set specific hour',
     'task.due_by_hour': 'Due by specific hour',
     'task.scheduled': 'Scheduled',
@@ -130,6 +137,30 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     'addtoday.title': 'Add to today',
     'addtoday.empty': 'All tasks are already in your plan.',
     'addtoday.add': 'Add',
+
+    // Day close screen
+    'dayclose.eyebrow_morning': 'MORNING',
+    'dayclose.eyebrow_afternoon': 'AFTERNOON',
+    'dayclose.eyebrow_evening': 'EVENING',
+    'dayclose.eyebrow_night': 'NIGHT',
+    'dayclose.headline': 'How did today land?',
+    'dayclose.the_day': 'THE DAY',
+    'dayclose.done_of': 'of',
+    'dayclose.done_word': 'done',
+    'dayclose.focus_label': 'FOCUS',
+    'dayclose.deep_label': 'DEEP',
+    'dayclose.wins_label': 'WINS',
+    'dayclose.mood_label': 'HOW DOES THE DAY FEEL?',
+    'dayclose.mood.great': 'Great',
+    'dayclose.mood.steady': 'Steady',
+    'dayclose.mood.heavy': 'Heavy',
+    'dayclose.one_line_label': 'ONE LINE',
+    'dayclose.one_line_placeholder': 'What stayed with you?',
+    'dayclose.save': 'Close the day',
+
+    // History day summary
+    'history.day_summary': 'Day summary',
+    'history.edit_summary': 'Edit summary',
   },
   ru: {
     // Dump screen
@@ -165,6 +196,9 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     'today.back_to_backlog': 'К бэклогу',
     'today.from_yesterday': 'со вчера',
     'today.deferred_x': 'отложено',
+    'today.finish_day': 'Завершить день',
+    'today.finish_day_ready': 'День завершён — закройте его',
+    'today.finish_day_pending': 'Завершить день',
 
     // Focus screen
     'focus.title': 'Фокус',
@@ -219,6 +253,7 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
 
     // TaskEvalSheet
     'task.adding': 'Добавление',
+    'task.editing': 'Редактирование',
     'task.priority': 'Приоритет',
     'task.required': '*',
     'task.optional': 'необязательно',
@@ -228,6 +263,9 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     'task.schedule': 'Запланировать',
     'task.schedule_hint': 'необязательно — привязать к дате и времени',
     'task.add': 'Добавить задачу',
+    'task.save': 'Сохранить',
+    'task.min': 'мин',
+    'task.duration_default': 'по умолчанию',
     'task.set_hour': 'Указать время',
     'task.due_by_hour': 'Срок в конкретное время',
     'task.scheduled': 'Запланировано',
@@ -260,5 +298,29 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     'addtoday.title': 'Добавить на сегодня',
     'addtoday.empty': 'Все задачи уже в плане.',
     'addtoday.add': 'Добавить',
+
+    // Day close screen
+    'dayclose.eyebrow_morning': 'УТРО',
+    'dayclose.eyebrow_afternoon': 'ДЕНЬ',
+    'dayclose.eyebrow_evening': 'ВЕЧЕР',
+    'dayclose.eyebrow_night': 'НОЧЬ',
+    'dayclose.headline': 'Каким получился день?',
+    'dayclose.the_day': 'ДЕНЬ',
+    'dayclose.done_of': 'из',
+    'dayclose.done_word': 'выполнено',
+    'dayclose.focus_label': 'ФОКУС',
+    'dayclose.deep_label': 'ГЛУБОКО',
+    'dayclose.wins_label': 'ПОБЕД',
+    'dayclose.mood_label': 'КАК ВЫ ЕГО ОЩУЩАЕТЕ?',
+    'dayclose.mood.great': 'Отлично',
+    'dayclose.mood.steady': 'Ровно',
+    'dayclose.mood.heavy': 'Тяжело',
+    'dayclose.one_line_label': 'ОДНА СТРОКА',
+    'dayclose.one_line_placeholder': 'Что вы вынесли?',
+    'dayclose.save': 'Завершить день',
+
+    // History day summary
+    'history.day_summary': 'Итоги дня',
+    'history.edit_summary': 'Изменить итоги',
   },
 };

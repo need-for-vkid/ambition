@@ -20,9 +20,14 @@ import {
   ClipboardList,
   RotateCcw,
   CheckCircle2,
+  Sparkles,
+  Minus,
+  Cloud,
+  Pencil,
 } from 'lucide-react-native';
 import { useTaskStore } from '../../store/tasks';
-import { CompletedTask, WorkType } from '../../types/task';
+import { CompletedTask, WorkType, DaySummary, Mood } from '../../types/task';
+import { useT } from '../../lib/i18n';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
@@ -43,14 +48,14 @@ function dayKey(iso: string): string {
   return iso.slice(0, 10);
 }
 
-function formatDayHeader(iso: string): string {
+function formatDayHeader(iso: string, tr: (k: string) => string): string {
   const date = new Date(iso);
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
 
-  if (dayKey(date.toISOString()) === dayKey(today.toISOString())) return 'Today';
-  if (dayKey(date.toISOString()) === dayKey(yesterday.toISOString())) return 'Yesterday';
+  if (dayKey(date.toISOString()) === dayKey(today.toISOString())) return tr('history.today');
+  if (dayKey(date.toISOString()) === dayKey(yesterday.toISOString())) return tr('history.yesterday');
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -69,11 +74,19 @@ function formatTime(iso: string): string {
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const { completed, loadCompleted, restoreCompletedTask } = useTaskStore();
+  const tr = useT();
+  const { completed, daySummaries, loadCompleted, loadDaySummaries, restoreCompletedTask } = useTaskStore();
 
   useEffect(() => {
     loadCompleted();
-  }, [loadCompleted]);
+    loadDaySummaries();
+  }, [loadCompleted, loadDaySummaries]);
+
+  const summaryByDate = useMemo(() => {
+    const m = new Map<string, DaySummary>();
+    for (const s of daySummaries) m.set(s.date, s);
+    return m;
+  }, [daySummaries]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, CompletedTask[]>();
@@ -111,8 +124,8 @@ export default function HistoryScreen() {
             <ChevronLeft size={22} color={C.fgSecondary} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={styles.eyebrow}>Archive</Text>
-            <Text style={styles.title}>Completed</Text>
+            <Text style={styles.eyebrow}>{tr('history.title')}</Text>
+            <Text style={styles.title}>{tr('history.title')}</Text>
           </View>
           <View style={styles.totalBadge}>
             <CheckCircle2 size={12} color={C.gold400} />
@@ -127,10 +140,7 @@ export default function HistoryScreen() {
         >
           {completed.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>Nothing completed yet.</Text>
-              <Text style={styles.emptyText}>
-                Tasks you finish will appear here.
-              </Text>
+              <Text style={styles.emptyTitle}>{tr('history.empty')}</Text>
             </View>
           ) : (
             grouped.map((group, gIdx) => (
@@ -140,8 +150,20 @@ export default function HistoryScreen() {
                 layout={LinearTransition.springify().damping(20)}
               >
                 <Text style={styles.dayHeader}>
-                  {formatDayHeader(group.items[0].completedAt)}
+                  {formatDayHeader(group.items[0].completedAt, tr)}
                 </Text>
+                {summaryByDate.has(group.key) && (
+                  <View style={styles.summaryWrap}>
+                    <DaySummaryCard
+                      summary={summaryByDate.get(group.key)!}
+                      onEdit={() => {
+                        impact();
+                        router.push({ pathname: '/(flow)/dayclose', params: { date: group.key } });
+                      }}
+                      tr={tr}
+                    />
+                  </View>
+                )}
                 <View style={styles.dayGroup}>
                   {group.items.map((item, i) => (
                     <Animated.View
@@ -159,6 +181,62 @@ export default function HistoryScreen() {
         </ScrollView>
       </SafeAreaView>
     </View>
+  );
+}
+
+const MOOD_ICONS: Record<Mood, React.FC<{ size: number; color: string }>> = {
+  great: Sparkles,
+  steady: Minus,
+  heavy: Cloud,
+};
+
+interface SummaryCardProps {
+  summary: DaySummary;
+  onEdit: () => void;
+  tr: (key: string) => string;
+}
+
+function DaySummaryCard({ summary, onEdit, tr }: SummaryCardProps) {
+  const MoodIcon = summary.mood ? MOOD_ICONS[summary.mood] : null;
+  const focusHrs = summary.focusMins > 0
+    ? (summary.focusMins / 60).toFixed(1).replace('.0', '') + 'h'
+    : '—';
+
+  return (
+    <Pressable
+      onPress={onEdit}
+      style={({ pressed }) => [styles.summaryCard, pressed && { opacity: 0.85 }]}
+      accessibilityRole="button"
+      accessibilityLabel={tr('history.edit_summary')}
+    >
+      <View style={styles.summaryHeader}>
+        <Text style={styles.summaryEyebrow}>{tr('history.day_summary')}</Text>
+        <Pencil size={12} color={C.fgTertiary} />
+      </View>
+      <View style={styles.summaryStatsRow}>
+        <View style={styles.summaryStat}>
+          <Text style={styles.summaryStatValue}>{focusHrs}</Text>
+          <Text style={styles.summaryStatLabel}>{tr('dayclose.focus_label')}</Text>
+        </View>
+        <View style={styles.summaryStat}>
+          <Text style={styles.summaryStatValue}>{summary.deepCount}</Text>
+          <Text style={styles.summaryStatLabel}>{tr('dayclose.deep_label')}</Text>
+        </View>
+        <View style={styles.summaryStat}>
+          <Text style={styles.summaryStatValue}>{summary.tasksCompleted}</Text>
+          <Text style={styles.summaryStatLabel}>{tr('dayclose.wins_label')}</Text>
+        </View>
+        {MoodIcon && summary.mood && (
+          <View style={styles.summaryStat}>
+            <MoodIcon size={18} color={C.gold400} />
+            <Text style={styles.summaryStatLabel}>{tr(`dayclose.mood.${summary.mood}`)}</Text>
+          </View>
+        )}
+      </View>
+      {summary.note && (
+        <Text style={styles.summaryNote}>"{summary.note}"</Text>
+      )}
+    </Pressable>
   );
 }
 
@@ -376,5 +454,59 @@ const styles = StyleSheet.create({
   },
   restoreBtnPressed: {
     backgroundColor: C.base600,
+  },
+  summaryWrap: {
+    paddingHorizontal: S[5],
+    marginBottom: S[2],
+  },
+  summaryCard: {
+    backgroundColor: 'rgba(201,162,39,0.06)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.borderGold,
+    padding: S[4],
+    gap: S[3],
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryEyebrow: {
+    fontFamily: Font.bodyMedium,
+    fontSize: Size.xs,
+    color: C.gold400,
+    textTransform: 'uppercase',
+    letterSpacing: 1.8,
+  },
+  summaryStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: S[3],
+  },
+  summaryStat: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 4,
+  },
+  summaryStatValue: {
+    fontFamily: Font.bodyMedium,
+    fontSize: Size.lg,
+    color: C.fgPrimary,
+    letterSpacing: 0.3,
+  },
+  summaryStatLabel: {
+    fontFamily: Font.bodyMedium,
+    fontSize: 10,
+    color: C.fgTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  summaryNote: {
+    fontFamily: Font.body,
+    fontSize: Size.sm,
+    color: C.fgSecondary,
+    fontStyle: 'italic',
+    lineHeight: Size.sm * 1.5,
   },
 });

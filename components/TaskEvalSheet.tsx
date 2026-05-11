@@ -27,33 +27,31 @@ import { Importance, WorkType, DeadlineLabel, Task } from '../types/task';
 import { C, IMPORTANCE_COLORS, WORK_TYPE_COLORS } from '../constants/colors';
 import { Font, Size } from '../constants/typography';
 import { S } from '../constants/spacing';
+import { useT } from '../lib/i18n';
 
 interface Props {
   pendingText: string;
-  onAdd: (task: Task) => void;
+  existingTask?: Task | null;
+  onAdd?: (task: Task) => void;
+  onUpdate?: (task: Task) => void;
   onClose: () => void;
 }
 
-const IMPORTANCE_OPTIONS: { value: Importance; label: string; desc: string }[] = [
-  { value: 'must', label: 'Must', desc: "Critical, can't skip" },
-  { value: 'should', label: 'Should', desc: 'Important, high value' },
-  { value: 'could', label: 'Could', desc: 'Useful if time allows' },
-  { value: 'would', label: 'Would', desc: 'Nice to have someday' },
+const IMPORTANCE_VALUES: Importance[] = ['must', 'should', 'could', 'would'];
+
+const WORK_TYPE_VALUES: { value: WorkType; Icon: React.FC<{ size: number; color: string }> }[] = [
+  { value: 'deep', Icon: Brain },
+  { value: 'learning', Icon: BookOpen },
+  { value: 'social', Icon: Users },
+  { value: 'body', Icon: Dumbbell },
+  { value: 'admin', Icon: ClipboardList },
 ];
 
-const WORK_TYPE_OPTIONS: { value: WorkType; label: string; Icon: React.FC<{ size: number; color: string }> }[] = [
-  { value: 'deep', label: 'Deep', Icon: Brain },
-  { value: 'learning', label: 'Learn', Icon: BookOpen },
-  { value: 'social', label: 'Social', Icon: Users },
-  { value: 'body', label: 'Body', Icon: Dumbbell },
-  { value: 'admin', label: 'Admin', Icon: ClipboardList },
-];
-
-const DEADLINE_PRESETS: { value: Exclude<DeadlineLabel, null>; label: string; days: number }[] = [
-  { value: 'today', label: 'Today', days: 0 },
-  { value: 'tomorrow', label: 'Tomorrow', days: 1 },
-  { value: 'this_week', label: 'This week', days: 7 },
-  { value: 'later', label: 'Later', days: 30 },
+const DEADLINE_PRESET_VALUES: { value: Exclude<DeadlineLabel, null>; days: number }[] = [
+  { value: 'today', days: 0 },
+  { value: 'tomorrow', days: 1 },
+  { value: 'this_week', days: 7 },
+  { value: 'later', days: 30 },
 ];
 
 const DURATION_DEFAULTS: Record<WorkType, number> = {
@@ -100,34 +98,63 @@ function presetDate(daysAhead: number): Date {
   return d;
 }
 
-export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
+export function TaskEvalSheet({ pendingText, existingTask, onAdd, onUpdate, onClose }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ['95%'], []);
+  const tr = useT();
+  const isEditing = !!existingTask;
 
-  const [importance, setImportance] = useState<Importance | null>(null);
-  const [workType, setWorkType] = useState<WorkType | null>(null);
-  const [deadlinePreset, setDeadlinePreset] = useState<DeadlineLabel>(null);
-  const [customDeadline, setCustomDeadline] = useState<Date | null>(null);
+  const [importance, setImportance] = useState<Importance | null>(existingTask?.importance ?? null);
+  const [workType, setWorkType] = useState<WorkType | null>(existingTask?.workType ?? null);
+  const [deadlinePreset, setDeadlinePreset] = useState<DeadlineLabel>(
+    existingTask?.deadlineLabel ?? null
+  );
+  const [customDeadline, setCustomDeadline] = useState<Date | null>(() => {
+    // If the existing task has a deadline that doesn't match a preset, treat it as custom
+    if (existingTask?.deadline && !existingTask.deadlineLabel) return new Date(existingTask.deadline);
+    // If it has both a deadline label and a custom deadlineTime, also keep the date
+    if (existingTask?.deadline && existingTask.deadlineTime) return new Date(existingTask.deadline);
+    return null;
+  });
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
-  const [deadlineTimeEnabled, setDeadlineTimeEnabled] = useState(false);
+  const [deadlineTimeEnabled, setDeadlineTimeEnabled] = useState(!!existingTask?.deadlineTime);
   const [deadlineTimeValue, setDeadlineTimeValue] = useState<Date>(() => {
+    if (existingTask?.deadlineTime) {
+      const d = new Date();
+      const [h, m] = existingTask.deadlineTime.split(':').map(Number);
+      d.setHours(h, m, 0, 0);
+      return d;
+    }
     const d = new Date();
     d.setHours(17, 0, 0, 0);
     return d;
   });
   const [showDeadlineTimePicker, setShowDeadlineTimePicker] = useState(false);
 
-  const [scheduleEnabled, setScheduleEnabled] = useState(false);
-  const [schedDate, setSchedDate] = useState<Date>(new Date());
-  const [schedTime, setSchedTime] = useState<Date>(new Date());
+  const [scheduleEnabled, setScheduleEnabled] = useState(!!existingTask?.scheduledTime);
+  const [schedDate, setSchedDate] = useState<Date>(() => {
+    if (existingTask?.scheduledDate) return new Date(existingTask.scheduledDate);
+    return new Date();
+  });
+  const [schedTime, setSchedTime] = useState<Date>(() => {
+    if (existingTask?.scheduledTime) {
+      const d = new Date();
+      const [h, m] = existingTask.scheduledTime.split(':').map(Number);
+      d.setHours(h, m, 0, 0);
+      return d;
+    }
+    return new Date();
+  });
   const [showSchedDatePicker, setShowSchedDatePicker] = useState(false);
   const [showSchedTimePicker, setShowSchedTimePicker] = useState(false);
 
-  const [durationStr, setDurationStr] = useState('');
+  const [durationStr, setDurationStr] = useState(
+    existingTask?.durationMins ? String(existingTask.durationMins) : ''
+  );
 
-  const canAdd = importance !== null && workType !== null;
+  const canSave = importance !== null && workType !== null;
 
-  const handleAdd = useCallback(() => {
+  const handleSave = useCallback(() => {
     if (!importance || !workType) return;
     const dur = durationStr ? parseInt(durationStr, 10) : null;
 
@@ -141,11 +168,28 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
         deadlineTime = formatTime(deadlineTimeValue);
       }
     } else if (deadlinePreset) {
-      const preset = DEADLINE_PRESETS.find((p) => p.value === deadlinePreset);
+      const preset = DEADLINE_PRESET_VALUES.find((p) => p.value === deadlinePreset);
       if (preset) {
         deadline = presetDate(preset.days).toISOString();
         deadlineLabel = deadlinePreset;
       }
+    }
+
+    if (isEditing && existingTask) {
+      const updated: Task = {
+        ...existingTask,
+        importance,
+        workType,
+        durationMins: dur && !isNaN(dur) ? dur : null,
+        deadlineLabel,
+        deadline,
+        deadlineTime,
+        scheduledDate: scheduleEnabled ? schedDate.toISOString().slice(0, 10) : null,
+        scheduledTime: scheduleEnabled ? formatTime(schedTime) : null,
+      };
+      impact(Haptics.ImpactFeedbackStyle.Medium);
+      onUpdate?.(updated);
+      return;
     }
 
     const task: Task = {
@@ -164,12 +208,15 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
       carryOverCount: 0,
     };
     impact(Haptics.ImpactFeedbackStyle.Medium);
-    onAdd(task);
-  }, [importance, workType, deadlinePreset, customDeadline, deadlineTimeEnabled, deadlineTimeValue, durationStr, scheduleEnabled, schedDate, schedTime, pendingText, onAdd]);
+    onAdd?.(task);
+  }, [importance, workType, deadlinePreset, customDeadline, deadlineTimeEnabled, deadlineTimeValue, durationStr, scheduleEnabled, schedDate, schedTime, pendingText, isEditing, existingTask, onAdd, onUpdate]);
 
   const durationPlaceholder = workType
-    ? `${DURATION_DEFAULTS[workType]} min (default)`
-    : '60 min';
+    ? `${DURATION_DEFAULTS[workType]} ${tr('task.min')} (${tr('task.duration_default')})`
+    : `60 ${tr('task.min')}`;
+
+  const previewLabel = isEditing ? tr('task.editing') : tr('task.adding');
+  const previewText = isEditing && existingTask ? existingTask.text : pendingText;
 
   // Date picker handlers
   const onDeadlinePicked = (event: DateTimePickerEvent, date?: Date) => {
@@ -231,21 +278,21 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
       >
         {/* Preview */}
         <View style={styles.preview}>
-          <Text style={styles.previewLabel}>Adding</Text>
-          <Text style={styles.previewText} numberOfLines={3}>{pendingText}</Text>
+          <Text style={styles.previewLabel}>{previewLabel}</Text>
+          <Text style={styles.previewText} numberOfLines={3}>{previewText}</Text>
         </View>
 
         {/* Importance */}
         <Text style={styles.sectionLabel}>
-          Priority <Text style={styles.required}>*</Text>
+          {tr('task.priority')} <Text style={styles.required}>*</Text>
         </Text>
         <View style={styles.importanceGrid}>
-          {IMPORTANCE_OPTIONS.map((opt) => {
-            const selected = importance === opt.value;
-            const color = IMPORTANCE_COLORS[opt.value];
+          {IMPORTANCE_VALUES.map((value) => {
+            const selected = importance === value;
+            const color = IMPORTANCE_COLORS[value];
             return (
               <Pressable
-                key={opt.value}
+                key={value}
                 style={({ pressed }) => [
                   styles.importanceCard,
                   selected && { borderColor: color, backgroundColor: `${color}1c` },
@@ -253,12 +300,12 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
                 ]}
                 onPress={() => {
                   impact();
-                  setImportance(opt.value);
+                  setImportance(value);
                 }}
               >
                 <View style={[styles.importanceDot, { backgroundColor: color }]} />
-                <Text style={styles.importanceLabel}>{opt.label}</Text>
-                <Text style={styles.importanceDesc}>{opt.desc}</Text>
+                <Text style={styles.importanceLabel}>{tr(`task.importance.${value}`)}</Text>
+                <Text style={styles.importanceDesc}>{tr(`task.importance.${value}_desc`)}</Text>
               </Pressable>
             );
           })}
@@ -266,10 +313,10 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
 
         {/* Work type */}
         <Text style={styles.sectionLabel}>
-          Work type <Text style={styles.required}>*</Text>
+          {tr('task.work_type')} <Text style={styles.required}>*</Text>
         </Text>
         <View style={styles.typeRow}>
-          {WORK_TYPE_OPTIONS.map((opt) => {
+          {WORK_TYPE_VALUES.map((opt) => {
             const selected = workType === opt.value;
             const color = WORK_TYPE_COLORS[opt.value];
             return (
@@ -286,7 +333,7 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
                 }}
               >
                 <opt.Icon size={14} color={selected ? color : C.fgTertiary} />
-                <Text style={[styles.typeLabel, selected && { color }]}>{opt.label}</Text>
+                <Text style={[styles.typeLabel, selected && { color }]}>{tr(`task.type.${opt.value === 'learning' ? 'learning' : opt.value}`)}</Text>
               </Pressable>
             );
           })}
@@ -294,7 +341,7 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
 
         {/* Duration */}
         <Text style={styles.sectionLabel}>
-          Duration <Text style={styles.optional}>optional</Text>
+          {tr('task.duration')} <Text style={styles.optional}>{tr('task.optional')}</Text>
         </Text>
         <BottomSheetTextInput
           style={styles.textInput}
@@ -309,10 +356,10 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
 
         {/* Deadline */}
         <Text style={styles.sectionLabel}>
-          Deadline <Text style={styles.optional}>optional</Text>
+          {tr('task.deadline')} <Text style={styles.optional}>{tr('task.optional')}</Text>
         </Text>
         <View style={styles.deadlineRow}>
-          {DEADLINE_PRESETS.map((opt) => {
+          {DEADLINE_PRESET_VALUES.map((opt) => {
             const selected = deadlinePreset === opt.value && !customDeadline;
             return (
               <Pressable
@@ -330,7 +377,7 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
               >
                 <Calendar size={12} color={selected ? C.gold400 : C.fgTertiary} />
                 <Text style={[styles.deadlineLabel, selected && styles.deadlineLabelActive]}>
-                  {opt.label}
+                  {tr(`task.deadline.${opt.value}`)}
                 </Text>
               </Pressable>
             );
@@ -349,7 +396,7 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
         >
           <Calendar size={14} color={customDeadline ? C.gold400 : C.fgSecondary} />
           <Text style={[styles.specificDateText, customDeadline && styles.specificDateTextActive]}>
-            {customDeadline ? formatDate(customDeadline) : 'Pick specific date'}
+            {customDeadline ? formatDate(customDeadline) : tr('task.pick_date')}
           </Text>
           {customDeadline && (
             <Pressable
@@ -390,7 +437,7 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
             >
               <Clock size={14} color={deadlineTimeEnabled ? C.gold400 : C.fgSecondary} />
               <Text style={[styles.toggleLabel, deadlineTimeEnabled && styles.toggleLabelActive]}>
-                {deadlineTimeEnabled ? 'Due by specific hour' : 'Set specific hour'}
+                {deadlineTimeEnabled ? tr('task.due_by_hour') : tr('task.set_hour')}
               </Text>
               <View style={[styles.toggleSwitch, deadlineTimeEnabled && styles.toggleSwitchActive]}>
                 <View style={[styles.toggleKnob, deadlineTimeEnabled && styles.toggleKnobActive]} />
@@ -423,7 +470,7 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
 
         {/* Scheduled time */}
         <Text style={styles.sectionLabel}>
-          Schedule <Text style={styles.optional}>optional — pin to specific date & time</Text>
+          {tr('task.schedule')} <Text style={styles.optional}>{tr('task.schedule_hint')}</Text>
         </Text>
         <Pressable
           style={({ pressed }) => [
@@ -438,7 +485,7 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
         >
           <Clock size={14} color={scheduleEnabled ? C.gold400 : C.fgSecondary} />
           <Text style={[styles.toggleLabel, scheduleEnabled && styles.toggleLabelActive]}>
-            {scheduleEnabled ? 'Scheduled' : 'Schedule for specific time'}
+            {scheduleEnabled ? tr('task.scheduled') : tr('task.schedule_for')}
           </Text>
           <View style={[styles.toggleSwitch, scheduleEnabled && styles.toggleSwitchActive]}>
             <View style={[styles.toggleKnob, scheduleEnabled && styles.toggleKnobActive]} />
@@ -491,19 +538,19 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
           />
         )}
 
-        {/* Add button */}
+        {/* Add/Save button */}
         <Pressable
           style={({ pressed }) => [
             styles.addBtn,
-            !canAdd && styles.addBtnDisabled,
-            pressed && canAdd && styles.addBtnPressed,
+            !canSave && styles.addBtnDisabled,
+            pressed && canSave && styles.addBtnPressed,
           ]}
-          onPress={handleAdd}
-          disabled={!canAdd}
+          onPress={handleSave}
+          disabled={!canSave}
           accessibilityRole="button"
         >
-          <Text style={[styles.addBtnText, !canAdd && styles.addBtnTextDisabled]}>
-            Add task
+          <Text style={[styles.addBtnText, !canSave && styles.addBtnTextDisabled]}>
+            {isEditing ? tr('task.save') : tr('task.add')}
           </Text>
         </Pressable>
       </BottomSheetScrollView>

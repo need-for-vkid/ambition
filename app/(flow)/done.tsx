@@ -14,6 +14,7 @@ import Svg, { Defs, RadialGradient, Stop, Circle, Rect } from 'react-native-svg'
 import * as Haptics from 'expo-haptics';
 import { Check } from 'lucide-react-native';
 import { useTaskStore } from '../../store/tasks';
+import { useT } from '../../lib/i18n';
 import { C } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
@@ -24,6 +25,7 @@ function impact(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle
 
 export default function DoneScreen() {
   const router = useRouter();
+  const tr = useT();
   const { dayPlan } = useTaskStore();
 
   const scale = useSharedValue(0);
@@ -89,18 +91,18 @@ export default function DoneScreen() {
 
           {/* Message */}
           <Animated.View style={[styles.copy, titleStyle]}>
-            <Text style={styles.headline}>Task done.</Text>
+            <Text style={styles.headline}>{tr('done.headline')}</Text>
             <Text style={styles.subtext}>
               {remaining > 0
-                ? `${remaining} task${remaining > 1 ? 's' : ''} still in today's plan.`
-                : "That's everything for today. Well done."}
+                ? `${remaining} ${remaining > 1 ? tr('done.remaining_plural') : tr('done.remaining_single')}`
+                : tr('done.all_done')}
             </Text>
           </Animated.View>
 
           {/* Stats */}
           <Animated.View style={[styles.statsRow, titleStyle]}>
-            <StatPill label="Focused" value="25m" />
-            <StatPill label="Segments" value="1" />
+            <StatPill label={tr('done.focused')} value="25m" />
+            <StatPill label={tr('done.segments')} value="1" />
           </Animated.View>
 
           {/* Actions */}
@@ -114,7 +116,7 @@ export default function DoneScreen() {
                 }}
                 accessibilityRole="button"
               >
-                <Text style={styles.primaryBtnText}>Next task</Text>
+                <Text style={styles.primaryBtnText}>{tr('done.next_task')}</Text>
               </Pressable>
             ) : (
               <Pressable
@@ -125,7 +127,7 @@ export default function DoneScreen() {
                 }}
                 accessibilityRole="button"
               >
-                <Text style={styles.primaryBtnText}>New day</Text>
+                <Text style={styles.primaryBtnText}>{tr('done.new_day')}</Text>
               </Pressable>
             )}
             <Pressable
@@ -136,7 +138,7 @@ export default function DoneScreen() {
               }}
               accessibilityRole="button"
             >
-              <Text style={styles.secondaryBtnText}>Back to plan</Text>
+              <Text style={styles.secondaryBtnText}>{tr('done.back_to_plan')}</Text>
             </Pressable>
           </Animated.View>
         </View>

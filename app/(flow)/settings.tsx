@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { ChevronLeft, Check } from 'lucide-react-native';
 import { useSettingsStore } from '../../store/settings';
 import { Locale } from '../../constants/strings';
+import { useT } from '../../lib/i18n';
 import { C } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
@@ -28,6 +29,7 @@ const LANGUAGE_OPTIONS: { value: Locale; label: string; native: string }[] = [
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const tr = useT();
   const { locale, setLocale } = useSettingsStore();
 
   const handleLocale = async (value: Locale) => {
@@ -51,7 +53,7 @@ export default function SettingsScreen() {
           >
             <ChevronLeft size={20} color={C.fgSecondary} />
           </Pressable>
-          <Text style={styles.headerTitle}>Settings</Text>
+          <Text style={styles.headerTitle}>{tr('settings.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -61,7 +63,7 @@ export default function SettingsScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Language section */}
-          <Text style={styles.sectionLabel}>Language / Язык</Text>
+          <Text style={styles.sectionLabel}>{tr('settings.language_section')}</Text>
           <View style={styles.optionGroup}>
             {LANGUAGE_OPTIONS.map((opt, i) => {
               const selected = locale === opt.value;

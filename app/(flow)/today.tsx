@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -32,11 +32,12 @@ import {
   Settings,
 } from 'lucide-react-native';
 import { useTaskStore } from '../../store/tasks';
-import { ScheduledBlock, WorkType } from '../../types/task';
+import { ScheduledBlock, WorkType, Task } from '../../types/task';
 import { planSummary } from '../../lib/scheduler';
 import { useT } from '../../lib/i18n';
 import { DayModePill } from '../../components/atoms/DayModePill';
 import { AddToTodaySheet } from '../../components/AddToTodaySheet';
+import { TaskEvalSheet } from '../../components/TaskEvalSheet';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
@@ -81,9 +82,18 @@ export default function TodayScreen() {
     setFocusTask,
     planningTomorrow,
     setPlanningTomorrow,
+    updateTaskFields,
+    completed,
+    daySummaries,
+    loadCompleted,
   } = useTaskStore();
 
+  useEffect(() => {
+    loadCompleted();
+  }, [loadCompleted]);
+
   const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const plan = dayPlan?.plan ?? [];
   const deferred = dayPlan?.deferred ?? [];
@@ -94,6 +104,14 @@ export default function TodayScreen() {
 
   const taskBlocks = plan.filter((b) => b.kind !== 'lunch');
   const firstUnblocked = taskBlocks.find((b) => !b.task.blocked);
+
+  // "Day complete" detection: any tasks finished today + nothing pending in plan.
+  // We highlight Finish day when (a) the plan has no unblocked task left AND (b) at
+  // least one task was completed today.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayCompletedCount = completed.filter((c) => c.completedAt.slice(0, 10) === todayISO).length;
+  const unblockedRemaining = taskBlocks.filter((b) => !b.task.blocked).length;
+  const dayComplete = todayCompletedCount > 0 && unblockedRemaining === 0;
 
   const handleStartTask = useCallback(
     (block: ScheduledBlock) => {
@@ -157,13 +175,13 @@ export default function TodayScreen() {
                   style={[styles.dayToggleChip, !planningTomorrow && styles.dayToggleChipActive]}
                   onPress={() => { impact(); setPlanningTomorrow(false); }}
                 >
-                  <Text style={[styles.dayToggleText, !planningTomorrow && styles.dayToggleTextActive]}>Today</Text>
+                  <Text style={[styles.dayToggleText, !planningTomorrow && styles.dayToggleTextActive]}>{tr('task.deadline.today')}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.dayToggleChip, planningTomorrow && styles.dayToggleChipActive]}
                   onPress={() => { impact(); setPlanningTomorrow(true); }}
                 >
-                  <Text style={[styles.dayToggleText, planningTomorrow && styles.dayToggleTextActive]}>Tomorrow</Text>
+                  <Text style={[styles.dayToggleText, planningTomorrow && styles.dayToggleTextActive]}>{tr('task.deadline.tomorrow')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -276,6 +294,10 @@ export default function TodayScreen() {
                       block={block}
                       isFirst={block === firstUnblocked}
                       onStart={() => handleStartTask(block)}
+                      onEdit={() => {
+                        impact();
+                        setEditingTask(block.task);
+                      }}
                       onToggleBlocked={() => handleToggleBlocked(block.task.id)}
                     />
                   )}
@@ -297,6 +319,31 @@ export default function TodayScreen() {
             >
               <Plus size={16} color={C.gold400} />
               <Text style={styles.addToDayText}>{tr('today.add_to_today')}</Text>
+            </Pressable>
+          )}
+
+          {/* Finish day button — always visible, highlighted when day is complete */}
+          {!planningTomorrow && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.finishDayBtn,
+                dayComplete ? styles.finishDayBtnReady : styles.finishDayBtnPending,
+                pressed && styles.finishDayBtnPressed,
+              ]}
+              onPress={() => {
+                impact(Haptics.ImpactFeedbackStyle.Medium);
+                router.push('/(flow)/dayclose');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={tr('today.finish_day')}
+            >
+              <Sparkles size={15} color={dayComplete ? C.base900 : C.fgTertiary} />
+              <Text style={[
+                styles.finishDayText,
+                dayComplete ? styles.finishDayTextReady : styles.finishDayTextPending,
+              ]}>
+                {dayComplete ? tr('today.finish_day_ready') : tr('today.finish_day_pending')}
+              </Text>
             </Pressable>
           )}
 
@@ -324,6 +371,18 @@ export default function TodayScreen() {
       {addSheetOpen && (
         <AddToTodaySheet onClose={() => setAddSheetOpen(false)} />
       )}
+
+      {editingTask && (
+        <TaskEvalSheet
+          pendingText=""
+          existingTask={editingTask}
+          onUpdate={(updated) => {
+            updateTaskFields(updated);
+            setEditingTask(null);
+          }}
+          onClose={() => setEditingTask(null)}
+        />
+      )}
     </View>
   );
 }
@@ -347,10 +406,11 @@ interface BlockProps {
   block: ScheduledBlock;
   isFirst: boolean;
   onStart: () => void;
+  onEdit: () => void;
   onToggleBlocked: () => void;
 }
 
-function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps) {
+function ScheduleBlock({ block, isFirst, onStart, onEdit, onToggleBlocked }: BlockProps) {
   const { task, startTime, durationMins } = block;
   const WorkIcon = WORK_TYPE_ICONS[task.workType];
   const workColor = WORK_TYPE_COLORS[task.workType];
@@ -377,7 +437,12 @@ function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps)
         </Text>
       </View>
 
-      <View style={styles.blockContent}>
+      <Pressable
+        style={({ pressed }) => [styles.blockContent, pressed && { opacity: 0.7 }]}
+        onPress={onEdit}
+        accessibilityRole="button"
+        accessibilityLabel="Edit task"
+      >
         <Text style={styles.blockTitle} numberOfLines={2}>
           {task.text}
         </Text>
@@ -400,7 +465,7 @@ function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps)
             </>
           ) : null}
         </View>
-      </View>
+      </Pressable>
 
       <View style={styles.blockRight}>
         {isFirst && !task.blocked ? (
@@ -869,6 +934,41 @@ const styles = StyleSheet.create({
     fontSize: Size.sm,
     color: C.gold400,
     letterSpacing: 0.3,
+  },
+  finishDayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S[2],
+    marginHorizontal: S[5],
+    marginTop: S[3],
+    paddingVertical: S[3] + 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    minHeight: 48,
+  },
+  finishDayBtnPending: {
+    borderColor: C.borderSubtle,
+    backgroundColor: 'transparent',
+  },
+  finishDayBtnReady: {
+    borderColor: C.gold500,
+    backgroundColor: C.gold500,
+  },
+  finishDayBtnPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.99 }],
+  },
+  finishDayText: {
+    fontFamily: Font.bodyMedium,
+    fontSize: Size.sm,
+    letterSpacing: 0.5,
+  },
+  finishDayTextPending: {
+    color: C.fgTertiary,
+  },
+  finishDayTextReady: {
+    color: C.base900,
   },
   deferred: {
     marginHorizontal: S[5],
