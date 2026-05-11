@@ -92,12 +92,26 @@ export const useTaskStore = create<TasksState>((set, get) => ({
 
     await setLastPlanDate(today);
 
-    const plan = scheduleTasks(mutatedTasks, { dayMode, now: new Date() });
+    const now = new Date();
+    let plan = scheduleTasks(mutatedTasks, { dayMode, now });
+    let planningTomorrow = false;
+
+    // Late-day fallback: if it's evening and nothing fits today, default to tomorrow.
+    // This avoids opening to a barely-empty plan after 6pm when the user clearly
+    // can't realistically start anything today.
+    const taskBlocks = plan.plan.filter((b) => b.kind !== 'lunch');
+    const hasActiveTasks = mutatedTasks.some((t) => !t.blocked);
+    if (taskBlocks.length === 0 && hasActiveTasks && now.getHours() >= 18) {
+      planningTomorrow = true;
+      plan = scheduleTasks(mutatedTasks, { dayMode, now, planningTomorrow: true });
+    }
+
     set({
       tasks: mutatedTasks,
       dayPlan: plan,
       dayMode,
       isLoaded: true,
+      planningTomorrow,
     });
     void syncTaskNotifications(plan.plan);
   },

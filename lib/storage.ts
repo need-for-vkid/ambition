@@ -1,62 +1,73 @@
 import * as SQLite from 'expo-sqlite';
 import { Task, CompletedTask, DayMode } from '../types/task';
 
-let _db: SQLite.SQLiteDatabase | null = null;
+// Cache the in-flight promise so concurrent callers all await the same
+// initialization. Caching the result alone would race: when two flows hit
+// `getDb()` before the first openDatabaseAsync resolves, both fire their
+// own openDatabaseAsync, both run migrations, and one handle ends up broken.
+let _dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 const SCHEMA_VERSION = 2;
 
-async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (_db) return _db;
-  _db = await SQLite.openDatabaseAsync('ambition.db');
+function getDb(): Promise<SQLite.SQLiteDatabase> {
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = (async () => {
+    const db = await SQLite.openDatabaseAsync('ambition.db');
 
-  // Base table — created if not exists, untouched if already there
-  await _db.execAsync(`
-    CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      text TEXT NOT NULL,
-      importance TEXT NOT NULL,
-      work_type TEXT NOT NULL,
-      duration_mins INTEGER,
-      deadline_label TEXT,
-      deadline TEXT,
-      scheduled_date TEXT,
-      scheduled_time TEXT,
-      blocked INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS completed_tasks (
-      id TEXT PRIMARY KEY,
-      task_json TEXT NOT NULL,
-      completed_at TEXT NOT NULL,
-      pomos_count INTEGER DEFAULT 0,
-      notes TEXT
-    );
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-  `);
+    // Base tables — created if not exists, untouched if already there
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        text TEXT NOT NULL,
+        importance TEXT NOT NULL,
+        work_type TEXT NOT NULL,
+        duration_mins INTEGER,
+        deadline_label TEXT,
+        deadline TEXT,
+        scheduled_date TEXT,
+        scheduled_time TEXT,
+        blocked INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS completed_tasks (
+        id TEXT PRIMARY KEY,
+        task_json TEXT NOT NULL,
+        completed_at TEXT NOT NULL,
+        pomos_count INTEGER DEFAULT 0,
+        notes TEXT
+      );
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
 
-  // Schema migrations — additive, idempotent
-  const versionRow = await _db.getFirstAsync<{ user_version: number }>(
-    'PRAGMA user_version'
-  );
-  const currentVersion = versionRow?.user_version ?? 0;
+    // Schema migrations — additive, idempotent
+    const versionRow = await db.getFirstAsync<{ user_version: number }>(
+      'PRAGMA user_version'
+    );
+    const currentVersion = versionRow?.user_version ?? 0;
 
-  if (currentVersion < 2) {
-    // v2: add deadline_time + carry_over_count columns to tasks
-    const cols = await _db.getAllAsync<{ name: string }>('PRAGMA table_info(tasks)');
-    const names = cols.map((c) => c.name);
-    if (!names.includes('deadline_time')) {
-      await _db.execAsync('ALTER TABLE tasks ADD COLUMN deadline_time TEXT');
+    if (currentVersion < 2) {
+      // v2: add deadline_time + carry_over_count columns to tasks
+      const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(tasks)');
+      const names = cols.map((c) => c.name);
+      if (!names.includes('deadline_time')) {
+        await db.execAsync('ALTER TABLE tasks ADD COLUMN deadline_time TEXT');
+      }
+      if (!names.includes('carry_over_count')) {
+        await db.execAsync('ALTER TABLE tasks ADD COLUMN carry_over_count INTEGER DEFAULT 0');
+      }
     }
-    if (!names.includes('carry_over_count')) {
-      await _db.execAsync('ALTER TABLE tasks ADD COLUMN carry_over_count INTEGER DEFAULT 0');
-    }
-  }
 
-  await _db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-  return _db;
+    await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    return db;
+  })().catch((err) => {
+    // Clear the cached promise so a retry is possible after a transient failure
+    _dbPromise = null;
+    throw err;
+  });
+  return _dbPromise;
 }
 
 function rowToTask(row: Record<string, unknown>): Task {
