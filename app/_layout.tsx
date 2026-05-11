@@ -20,6 +20,7 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 import { configureHandler, requestPermission, scheduleMorningReminder } from '../lib/notifications';
 import { useTaskStore } from '../store/tasks';
+import { useSettingsStore } from '../store/settings';
 import { C } from '../constants/colors';
 
 configureHandler();
@@ -37,14 +38,16 @@ export default function RootLayout() {
   });
 
   const hydrate = useTaskStore((s) => s.hydrate);
+  const hydrateSettings = useSettingsStore((s) => s.hydrateSettings);
 
   useEffect(() => {
     hydrate();
+    hydrateSettings();
     (async () => {
       const granted = await requestPermission();
       if (granted) await scheduleMorningReminder(8, 0);
     })();
-  }, [hydrate]);
+  }, [hydrate, hydrateSettings]);
 
   if (!fontsLoaded) return null;
 

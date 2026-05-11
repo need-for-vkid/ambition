@@ -102,7 +102,7 @@ function presetDate(daysAhead: number): Date {
 
 export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
-  const snapPoints = useMemo(() => ['90%'], []);
+  const snapPoints = useMemo(() => ['95%'], []);
 
   const [importance, setImportance] = useState<Importance | null>(null);
   const [workType, setWorkType] = useState<WorkType | null>(null);
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: S[5],
-    paddingBottom: S[12],
+    paddingBottom: 120,
   },
   cardPressed: {
     opacity: 0.85,

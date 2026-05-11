@@ -194,7 +194,8 @@ export interface PlanSummary {
 export interface ScheduleOptions {
   dayMode?: DayMode;
   now?: Date;
-  forcedIds?: Set<string>;   // tasks the user pinned to today
+  planningTomorrow?: boolean; // if true, schedule full day from 9am regardless of time
+  forcedIds?: Set<string>;    // tasks the user pinned to today
 }
 
 export function scheduleTasks(tasks: Task[], options: ScheduleOptions = {}): DayPlan {
@@ -202,6 +203,13 @@ export function scheduleTasks(tasks: Task[], options: ScheduleOptions = {}): Day
   const now = options.now ?? new Date();
   const forcedIds = options.forcedIds ?? new Set<string>();
   const capacity = DAY_CAPACITY[dayMode];
+
+  // Compute effective start: if it's already past 9am (and not planning for tomorrow),
+  // start scheduling from the current time (rounded up to next 15min + 5min buffer).
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const effectiveStart = options.planningTomorrow || nowMins <= DAY_START
+    ? DAY_START
+    : Math.min(Math.ceil((nowMins + 5) / 15) * 15, DAY_END - 30);
 
   const unblocked = tasks.filter((t) => !t.blocked);
 
@@ -332,7 +340,7 @@ export function scheduleTasks(tasks: Task[], options: ScheduleOptions = {}): Day
   ): number | null {
     const pref = PREFERRED_WINDOWS[workType];
     const upperBound = Math.min(options.maxEndMins ?? DAY_END, DAY_END);
-    const lowerBound = Math.max(options.earliestStart ?? DAY_START, DAY_START);
+    const lowerBound = Math.max(options.earliestStart ?? effectiveStart, effectiveStart);
 
     const attempts = options.forceAnywhere
       ? [{ start: lowerBound, end: upperBound }]

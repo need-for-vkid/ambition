@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,10 +29,14 @@ import {
   Calendar,
   Clock,
   ChevronRight,
+  SortDesc,
+  Settings,
 } from 'lucide-react-native';
 import { TaskEvalSheet } from '../../components/TaskEvalSheet';
 import { PriorityDot } from '../../components/atoms/PriorityDot';
 import { useTaskStore } from '../../store/tasks';
+import { selectionScore } from '../../lib/scheduler';
+import { useT } from '../../lib/i18n';
 import { Task, WorkType } from '../../types/task';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
@@ -55,10 +59,12 @@ function impact(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle
 export default function DumpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { tasks, addTask, removeTask, toggleBlocked } = useTaskStore();
+  const tr = useT();
+  const { tasks, addTask, removeTask, toggleBlocked, recomputePlan } = useTaskStore();
   const [inputText, setInputText] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [sortMode, setSortMode] = useState<'default' | 'priority'>('default');
 
   useEffect(() => {
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -79,6 +85,14 @@ export default function DumpScreen() {
   const blockedCount = tasks.filter((t) => t.blocked).length;
   const canSort = unblocked.length >= 2;
 
+  const displayedTasks = useMemo(() => {
+    if (sortMode === 'priority') {
+      const now = new Date();
+      return [...tasks].sort((a, b) => selectionScore(b, now) - selectionScore(a, now));
+    }
+    return tasks;
+  }, [tasks, sortMode]);
+
   const handleSubmitText = useCallback(() => {
     if (!inputText.trim()) return;
     impact(Haptics.ImpactFeedbackStyle.Medium);
@@ -97,8 +111,9 @@ export default function DumpScreen() {
 
   const handleSort = useCallback(() => {
     impact(Haptics.ImpactFeedbackStyle.Heavy);
-    router.push('/(flow)/sorting');
-  }, [router]);
+    recomputePlan();
+    router.replace('/(flow)/today');
+  }, [recomputePlan, router]);
 
   return (
     <View style={styles.root}>
@@ -106,15 +121,42 @@ export default function DumpScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerEyebrow}>Brain dump</Text>
-            <Text style={styles.headerTitle}>What's on your mind?</Text>
+            <Text style={styles.headerEyebrow}>{tr('dump.eyebrow')}</Text>
+            <Text style={styles.headerTitle}>{tr('dump.title')}</Text>
           </View>
-          {blockedCount > 0 && (
-            <Animated.View entering={FadeIn} style={styles.blockedBadge}>
-              <Ban size={12} color={C.fgTertiary} />
-              <Text style={styles.blockedBadgeText}>{blockedCount}</Text>
-            </Animated.View>
-          )}
+          <View style={styles.headerRight}>
+            {blockedCount > 0 && (
+              <Animated.View entering={FadeIn} style={styles.blockedBadge}>
+                <Ban size={12} color={C.fgTertiary} />
+                <Text style={styles.blockedBadgeText}>{blockedCount}</Text>
+              </Animated.View>
+            )}
+            {tasks.length >= 2 && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.headerIconBtn,
+                  sortMode === 'priority' && styles.headerIconBtnActive,
+                  pressed && styles.headerIconBtnPressed,
+                ]}
+                onPress={() => {
+                  impact();
+                  setSortMode((m) => (m === 'default' ? 'priority' : 'default'));
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle priority sort"
+              >
+                <SortDesc size={16} color={sortMode === 'priority' ? C.gold400 : C.fgTertiary} />
+              </Pressable>
+            )}
+            <Pressable
+              style={({ pressed }) => [styles.headerIconBtn, pressed && styles.headerIconBtnPressed]}
+              onPress={() => router.push('/(flow)/settings')}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+            >
+              <Settings size={16} color={C.fgTertiary} />
+            </Pressable>
+          </View>
         </View>
 
         {/* Task list */}
@@ -129,13 +171,17 @@ export default function DumpScreen() {
         >
           {tasks.length === 0 && (
             <Animated.View entering={FadeIn.delay(150)} style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>Nothing here yet.</Text>
-              <Text style={styles.emptyText}>
-                Type anything — tasks, worries, ideas.{'\n'}Don't filter. Just dump.
-              </Text>
+              <Text style={styles.emptyTitle}>{tr('dump.empty_title')}</Text>
+              <Text style={styles.emptyText}>{tr('dump.empty_text')}</Text>
             </Animated.View>
           )}
-          {tasks.map((task, i) => (
+          {sortMode === 'priority' && tasks.length >= 2 && (
+            <Animated.View entering={FadeIn} style={styles.sortModeLabel}>
+              <SortDesc size={11} color={C.gold400} />
+              <Text style={styles.sortModeLabelText}>{tr('dump.sorted_by_priority')}</Text>
+            </Animated.View>
+          )}
+          {displayedTasks.map((task, i) => (
             <Animated.View
               key={task.id}
               entering={FadeIn.duration(220)}
@@ -144,7 +190,8 @@ export default function DumpScreen() {
             >
               <TaskCard
                 task={task}
-                jitter={JITTER[i % JITTER.length]}
+                jitter={sortMode === 'priority' ? 0 : JITTER[i % JITTER.length]}
+                rank={sortMode === 'priority' && !task.blocked ? i + 1 : undefined}
                 onRemove={() => {
                   impact();
                   removeTask(task.id);
@@ -172,11 +219,11 @@ export default function DumpScreen() {
             onPress={handleSort}
             accessibilityRole="button"
           >
-            <Text style={styles.sortCTAText}>Sort my day</Text>
+            <Text style={styles.sortCTAText}>{tr('dump.sort_cta')}</Text>
             <ChevronRight size={18} color={C.base900} />
           </Pressable>
           <Text style={styles.sortHint}>
-            {unblocked.length} task{unblocked.length !== 1 ? 's' : ''} ready
+            {unblocked.length} {unblocked.length !== 1 ? tr('dump.tasks_ready_plural') : tr('dump.tasks_ready')}
           </Text>
         </Animated.View>
       )}
@@ -194,13 +241,14 @@ export default function DumpScreen() {
         <View style={styles.inputRow}>
           <TextInput
             style={styles.input}
-            placeholder="Add a thought…"
+            placeholder={tr('dump.placeholder')}
             placeholderTextColor={C.fgTertiary}
             value={inputText}
             onChangeText={setInputText}
             onSubmitEditing={handleSubmitText}
             returnKeyType="done"
-            multiline={false}
+            multiline={true}
+            blurOnSubmit={true}
             accessibilityLabel="Add a thought"
           />
           <Pressable
@@ -234,11 +282,12 @@ export default function DumpScreen() {
 interface CardProps {
   task: Task;
   jitter: number;
+  rank?: number;
   onRemove: () => void;
   onToggleBlocked: () => void;
 }
 
-function TaskCard({ task, jitter, onRemove, onToggleBlocked }: CardProps) {
+function TaskCard({ task, jitter, rank, onRemove, onToggleBlocked }: CardProps) {
   const WorkIcon = WORK_TYPE_ICONS[task.workType];
   const workColor = WORK_TYPE_COLORS[task.workType];
 
@@ -251,7 +300,11 @@ function TaskCard({ task, jitter, onRemove, onToggleBlocked }: CardProps) {
       ]}
     >
       <View style={styles.cardLeft}>
-        <PriorityDot importance={task.importance} size={9} />
+        {rank !== undefined ? (
+          <Text style={styles.rankNum}>{rank}</Text>
+        ) : (
+          <PriorityDot importance={task.importance} size={9} />
+        )}
         <Text style={[styles.cardText, task.blocked && styles.cardTextBlocked]} numberOfLines={3}>
           {task.text}
         </Text>
@@ -338,6 +391,28 @@ const styles = StyleSheet.create({
     color: C.fgPrimary,
     lineHeight: Size['3xl'] * 1.1,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[2],
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.base700,
+    borderWidth: 1,
+    borderColor: C.borderSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconBtnActive: {
+    borderColor: C.borderGold,
+    backgroundColor: 'rgba(201,162,39,0.12)',
+  },
+  headerIconBtnPressed: {
+    backgroundColor: C.base600,
+  },
   blockedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -353,6 +428,33 @@ const styles = StyleSheet.create({
     fontFamily: Font.bodyMedium,
     fontSize: Size.xs,
     color: C.fgTertiary,
+  },
+  sortModeLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: S[3],
+    paddingVertical: S[1] + 2,
+    backgroundColor: 'rgba(201,162,39,0.08)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.borderGold,
+    alignSelf: 'flex-start',
+    marginBottom: S[2],
+  },
+  sortModeLabelText: {
+    fontFamily: Font.bodyMedium,
+    fontSize: Size.xs,
+    color: C.gold400,
+    letterSpacing: 0.5,
+  },
+  rankNum: {
+    fontFamily: Font.mono,
+    fontSize: Size.xs,
+    color: C.gold400,
+    minWidth: 16,
+    textAlign: 'center',
+    marginTop: 1,
   },
   list: {
     flex: 1,
@@ -534,6 +636,7 @@ const styles = StyleSheet.create({
     color: C.fgPrimary,
     paddingVertical: S[2] + 2,
     minHeight: 44,
+    maxHeight: 100,
   },
   inputBtn: {
     width: 40,

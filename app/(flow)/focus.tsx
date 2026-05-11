@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { X, Pause, Play, Check } from 'lucide-react-native';
 import { useTaskStore } from '../../store/tasks';
 import { PomoDots } from '../../components/atoms/PomoDots';
+import { useT } from '../../lib/i18n';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
 import { Font, Size } from '../../constants/typography';
 import { S } from '../../constants/spacing';
@@ -31,6 +32,7 @@ function impact(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle
 export default function FocusScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const tr = useT();
   const { focusTask, markCurrentTaskDone } = useTaskStore();
 
   const [secondsLeft, setSecondsLeft] = useState(POMO_DURATION);
@@ -50,21 +52,21 @@ export default function FocusScreen() {
     if (!reason) return null;
     switch (reason.type) {
       case 'peak_window':
-        return `${task?.workType ?? ''} — your peak window`;
+        return `${task?.workType ?? ''} — ${tr('focus.why.peak_window')}`;
       case 'urgent_hours':
         return reason.hoursLeft <= 0
-          ? 'Due now'
-          : `Due in ${reason.hoursLeft}h`;
+          ? tr('focus.why.due_now')
+          : `${tr('focus.why.due_in')} ${reason.hoursLeft}${tr('focus.why.hours')}`;
       case 'overdue':
-        return 'Overdue — clear it first';
+        return tr('focus.why.overdue');
       case 'carry_over':
         return reason.days === 1
-          ? 'Carried from yesterday'
-          : `Carried ${reason.days} days`;
+          ? tr('focus.why.from_yesterday')
+          : `${tr('focus.why.carried')} ${reason.days} ${tr('focus.why.days')}`;
       case 'high_importance':
-        return 'High importance — done first';
+        return tr('focus.why.high_importance');
       case 'forced':
-        return 'You pinned this for today';
+        return tr('focus.why.forced');
       default:
         return null;
     }
@@ -180,7 +182,7 @@ export default function FocusScreen() {
             >
               <X size={20} color={C.fgSecondary} />
             </Pressable>
-            <Text style={styles.topLabel}>Focus</Text>
+            <Text style={styles.topLabel}>{tr('focus.title')}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -230,7 +232,7 @@ export default function FocusScreen() {
               <Text style={styles.timerText}>
                 {String(minutes).padStart(2, '0')}:{String(secs).padStart(2, '0')}
               </Text>
-              <Text style={styles.timerSub}>{running ? 'remaining' : 'paused'}</Text>
+              <Text style={styles.timerSub}>{running ? tr('focus.remaining') : tr('focus.paused')}</Text>
             </View>
           </View>
 
@@ -243,17 +245,17 @@ export default function FocusScreen() {
             />
             <Text style={styles.dotsLabel}>
               {currentPomo < 4
-                ? `Segment ${currentPomo + 1} of 4`
-                : 'All segments done!'}
+                ? `${tr('focus.segment')} ${currentPomo + 1} ${tr('focus.of')} 4`
+                : tr('focus.all_segments')}
             </Text>
           </View>
 
           {/* Notes */}
           <View style={styles.notesSection}>
-            <Text style={styles.notesLabel}>Notes</Text>
+            <Text style={styles.notesLabel}>{tr('focus.notes')}</Text>
             <TextInput
               style={styles.notesInput}
-              placeholder="Capture thoughts while you work…"
+              placeholder={tr('focus.notes_placeholder')}
               placeholderTextColor={C.fgTertiary}
               value={notes}
               onChangeText={setNotes}
@@ -283,7 +285,7 @@ export default function FocusScreen() {
               ) : (
                 <Play size={18} color={C.fgPrimary} />
               )}
-              <Text style={styles.pauseText}>{running ? 'Pause' : 'Resume'}</Text>
+              <Text style={styles.pauseText}>{running ? tr('focus.pause') : tr('focus.resume')}</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.doneBtn, pressed && styles.doneBtnPressed]}
@@ -291,7 +293,7 @@ export default function FocusScreen() {
               accessibilityRole="button"
             >
               <Check size={18} color={C.base900} />
-              <Text style={styles.doneBtnText}>Mark done</Text>
+              <Text style={styles.doneBtnText}>{tr('focus.mark_done')}</Text>
             </Pressable>
           </View>
         </ScrollView>

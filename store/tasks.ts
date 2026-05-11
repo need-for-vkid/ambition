@@ -24,6 +24,7 @@ interface TasksState {
   dayMode: DayMode;
   forcedTodayIds: Set<string>;
   completed: CompletedTask[];
+  planningTomorrow: boolean;
 
   hydrate: () => Promise<void>;
   addTask: (task: Task) => Promise<void>;
@@ -40,6 +41,7 @@ interface TasksState {
   restoreCompletedTask: (id: string) => Promise<void>;
   loadCompleted: () => Promise<void>;
   clearAll: () => Promise<void>;
+  setPlanningTomorrow: (val: boolean) => void;
 }
 
 function todayDate(): string {
@@ -54,6 +56,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
   dayMode: 'normal',
   forcedTodayIds: new Set<string>(),
   completed: [],
+  planningTomorrow: false,
 
   hydrate: async () => {
     const tasks = await loadTasks();
@@ -89,7 +92,7 @@ export const useTaskStore = create<TasksState>((set, get) => ({
 
     await setLastPlanDate(today);
 
-    const plan = scheduleTasks(mutatedTasks, { dayMode });
+    const plan = scheduleTasks(mutatedTasks, { dayMode, now: new Date() });
     set({
       tasks: mutatedTasks,
       dayPlan: plan,
@@ -128,6 +131,8 @@ export const useTaskStore = create<TasksState>((set, get) => ({
     const newPlan = scheduleTasks(newTasks, {
       dayMode: get().dayMode,
       forcedIds: get().forcedTodayIds,
+      now: new Date(),
+      planningTomorrow: get().planningTomorrow,
     });
     set({ tasks: newTasks, dayPlan: newPlan });
     void syncTaskNotifications(newPlan.plan);
@@ -139,6 +144,8 @@ export const useTaskStore = create<TasksState>((set, get) => ({
     const newPlan = scheduleTasks(get().tasks, {
       dayMode: get().dayMode,
       forcedIds: get().forcedTodayIds,
+      now: new Date(),
+      planningTomorrow: get().planningTomorrow,
     });
     set({ dayPlan: newPlan });
     void syncTaskNotifications(newPlan.plan);
@@ -174,6 +181,8 @@ export const useTaskStore = create<TasksState>((set, get) => ({
     const newPlan = scheduleTasks(get().tasks, {
       dayMode: mode,
       forcedIds: get().forcedTodayIds,
+      now: new Date(),
+      planningTomorrow: get().planningTomorrow,
     });
     set({ dayMode: mode, dayPlan: newPlan });
     void syncTaskNotifications(newPlan.plan);
@@ -185,6 +194,8 @@ export const useTaskStore = create<TasksState>((set, get) => ({
     const newPlan = scheduleTasks(get().tasks, {
       dayMode: get().dayMode,
       forcedIds: forced,
+      now: new Date(),
+      planningTomorrow: get().planningTomorrow,
     });
     set({ forcedTodayIds: forced, dayPlan: newPlan });
     void syncTaskNotifications(newPlan.plan);
@@ -196,6 +207,8 @@ export const useTaskStore = create<TasksState>((set, get) => ({
     const newPlan = scheduleTasks(get().tasks, {
       dayMode: get().dayMode,
       forcedIds: forced,
+      now: new Date(),
+      planningTomorrow: get().planningTomorrow,
     });
     set({ forcedTodayIds: forced, dayPlan: newPlan });
     void syncTaskNotifications(newPlan.plan);
@@ -217,6 +230,8 @@ export const useTaskStore = create<TasksState>((set, get) => ({
     const newPlan = scheduleTasks(newTasks, {
       dayMode: get().dayMode,
       forcedIds: get().forcedTodayIds,
+      now: new Date(),
+      planningTomorrow: get().planningTomorrow,
     });
     set({
       tasks: newTasks,
@@ -233,5 +248,16 @@ export const useTaskStore = create<TasksState>((set, get) => ({
 
   clearAll: async () => {
     set({ tasks: [], dayPlan: null, focusTask: null, forcedTodayIds: new Set(), completed: [] });
+  },
+
+  setPlanningTomorrow: (val) => {
+    const newPlan = scheduleTasks(get().tasks, {
+      dayMode: get().dayMode,
+      forcedIds: get().forcedTodayIds,
+      now: new Date(),
+      planningTomorrow: val,
+    });
+    set({ planningTomorrow: val, dayPlan: newPlan });
+    void syncTaskNotifications(newPlan.plan);
   },
 }));

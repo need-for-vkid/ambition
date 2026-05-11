@@ -19,6 +19,7 @@ import {
   Archive,
   Ban,
   ChevronRight,
+  ChevronLeft,
   Brain,
   BookOpen,
   Users,
@@ -28,10 +29,12 @@ import {
   Utensils,
   RotateCcw,
   Plus,
+  Settings,
 } from 'lucide-react-native';
 import { useTaskStore } from '../../store/tasks';
 import { ScheduledBlock, WorkType } from '../../types/task';
 import { planSummary } from '../../lib/scheduler';
+import { useT } from '../../lib/i18n';
 import { DayModePill } from '../../components/atoms/DayModePill';
 import { AddToTodaySheet } from '../../components/AddToTodaySheet';
 import { C, WORK_TYPE_COLORS } from '../../constants/colors';
@@ -50,8 +53,10 @@ function impact(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle
   if (Platform.OS !== 'web') Haptics.impactAsync(style).catch(() => {});
 }
 
-function formatDate(): string {
-  return new Date().toLocaleDateString('en-US', {
+function formatDate(tomorrow = false): string {
+  const d = new Date();
+  if (tomorrow) d.setDate(d.getDate() + 1);
+  return d.toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -66,6 +71,7 @@ function formatHours(mins: number): string {
 
 export default function TodayScreen() {
   const router = useRouter();
+  const tr = useT();
   const {
     tasks,
     dayPlan,
@@ -73,6 +79,8 @@ export default function TodayScreen() {
     setDayMode,
     toggleBlockedAndReschedule,
     setFocusTask,
+    planningTomorrow,
+    setPlanningTomorrow,
   } = useTaskStore();
 
   const [addSheetOpen, setAddSheetOpen] = useState(false);
@@ -129,21 +137,55 @@ export default function TodayScreen() {
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.dateLabel}>{formatDate()}</Text>
-            <Text style={styles.title}>Today</Text>
-          </View>
           <Pressable
-            style={({ pressed }) => [styles.bellBtn, pressed && styles.bellBtnPressed]}
+            style={({ pressed }) => [styles.headerIconBtn, pressed && styles.headerIconBtnPressed]}
             onPress={() => {
               impact();
-              router.push('/(flow)/history');
+              router.push('/(flow)/dump');
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open archive"
+            accessibilityLabel="Back to backlog"
           >
-            <Archive size={18} color={C.fgSecondary} />
+            <ChevronLeft size={18} color={C.fgTertiary} />
           </Pressable>
+          <View style={{ flex: 1, paddingHorizontal: S[3] }}>
+            <Text style={styles.dateLabel}>{formatDate(planningTomorrow)}</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>{planningTomorrow ? 'Tomorrow' : 'Today'}</Text>
+              <View style={styles.dayToggle}>
+                <Pressable
+                  style={[styles.dayToggleChip, !planningTomorrow && styles.dayToggleChipActive]}
+                  onPress={() => { impact(); setPlanningTomorrow(false); }}
+                >
+                  <Text style={[styles.dayToggleText, !planningTomorrow && styles.dayToggleTextActive]}>Today</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.dayToggleChip, planningTomorrow && styles.dayToggleChipActive]}
+                  onPress={() => { impact(); setPlanningTomorrow(true); }}
+                >
+                  <Text style={[styles.dayToggleText, planningTomorrow && styles.dayToggleTextActive]}>Tomorrow</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+          <View style={styles.headerActions}>
+            <Pressable
+              style={({ pressed }) => [styles.headerIconBtn, pressed && styles.headerIconBtnPressed]}
+              onPress={() => { impact(); router.push('/(flow)/settings'); }}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+            >
+              <Settings size={16} color={C.fgTertiary} />
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.headerIconBtn, pressed && styles.headerIconBtnPressed]}
+              onPress={() => { impact(); router.push('/(flow)/history'); }}
+              accessibilityRole="button"
+              accessibilityLabel="Open archive"
+            >
+              <Archive size={16} color={C.fgTertiary} />
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView
@@ -160,13 +202,13 @@ export default function TodayScreen() {
           <View style={styles.summaryCard}>
             <View style={styles.summaryHeader}>
               <Sparkles size={12} color={C.gold400} />
-              <Text style={styles.summaryEyebrow}>AI plan</Text>
+              <Text style={styles.summaryEyebrow}>{tr('today.ai_plan')}</Text>
             </View>
             <Text style={styles.summaryText}>{aiSummary}</Text>
             {summary && taskBlocks.length > 0 && (
               <Text style={styles.summaryMeta}>
-                {summary.scheduledCount} on the plan
-                {summary.deferredCount > 0 ? ` · ${summary.deferredCount} deferred` : ''}
+                {summary.scheduledCount} {tr('today.on_the_plan')}
+                {summary.deferredCount > 0 ? ` · ${summary.deferredCount} ${tr('today.deferred')}` : ''}
               </Text>
             )}
           </View>
@@ -174,13 +216,13 @@ export default function TodayScreen() {
           {/* Stats grid */}
           {summary && (
             <View style={styles.statsRow}>
-              <Stat label="TASKS" value={String(summary.totalTasks)} />
+              <Stat label={tr('today.tasks')} value={String(summary.totalTasks)} />
               <Stat
-                label="FOCUS"
+                label={tr('today.focus_label')}
                 value={summary.totalFocusMins > 0 ? formatHours(summary.totalFocusMins) : '—'}
               />
               <Stat
-                label="OF"
+                label={tr('today.of')}
                 value={formatHours(summary.capacityMins)}
                 subtle
               />
@@ -190,7 +232,7 @@ export default function TodayScreen() {
           {/* Schedule header */}
           {plan.length > 0 && (
             <View style={styles.scheduleHeader}>
-              <Text style={styles.scheduleEyebrow}>Schedule</Text>
+              <Text style={styles.scheduleEyebrow}>{tr('today.schedule')}</Text>
               {summary && summary.totalFocusMins > 0 && (
                 <Text style={styles.scheduleHeaderRight}>
                   {formatHours(summary.totalFocusMins)} focus
@@ -202,20 +244,20 @@ export default function TodayScreen() {
           {/* Schedule */}
           {plan.length === 0 ? (
             <View style={styles.emptyPlan}>
-              <Text style={styles.emptyTitle}>The day is clear.</Text>
+              <Text style={styles.emptyTitle}>{tr('today.empty_title')}</Text>
               <Text style={styles.emptyText}>
                 {tasks.length === 0
-                  ? 'Add some thoughts to begin.'
-                  : 'All tasks blocked or completed.'}
+                  ? tr('today.empty_add_thoughts')
+                  : tr('today.empty_all_blocked')}
               </Text>
               <Pressable
-                style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+                style={({ pressed }) => [styles.emptyBackBtn, pressed && styles.emptyBackBtnPressed]}
                 onPress={() => {
                   impact();
                   router.replace('/(flow)/dump');
                 }}
               >
-                <Text style={styles.backBtnText}>Back to dump</Text>
+                <Text style={styles.emptyBackBtnText}>{tr('today.back_to_dump')}</Text>
               </Pressable>
             </View>
           ) : (
@@ -254,14 +296,14 @@ export default function TodayScreen() {
               accessibilityLabel="Add task to today"
             >
               <Plus size={16} color={C.gold400} />
-              <Text style={styles.addToDayText}>Add task to today</Text>
+              <Text style={styles.addToDayText}>{tr('today.add_to_today')}</Text>
             </Pressable>
           )}
 
           {/* Deferred */}
           {deferred.length > 0 && (
             <View style={styles.deferred}>
-              <Text style={styles.deferredLabel}>Didn't fit today</Text>
+              <Text style={styles.deferredLabel}>{tr('today.didnt_fit')}</Text>
               {deferred.map((task) => (
                 <View key={task.id} style={styles.deferredItem}>
                   <View style={[styles.deferredDot, { backgroundColor: WORK_TYPE_COLORS[task.workType] }]} />
@@ -312,19 +354,18 @@ function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps)
   const { task, startTime, durationMins } = block;
   const WorkIcon = WORK_TYPE_ICONS[task.workType];
   const workColor = WORK_TYPE_COLORS[task.workType];
+  const tr = useT();
 
   const h = Math.floor(durationMins / 60);
   const m = durationMins % 60;
   const durStr = h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
 
   return (
-    <Pressable
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.block,
         isFirst && !task.blocked && styles.blockFirst,
-        pressed && isFirst && !task.blocked && styles.blockPressed,
       ]}
-      onPress={isFirst && !task.blocked ? onStart : undefined}
     >
       {/* Time accent bar */}
       <View style={[styles.blockAccent, { backgroundColor: workColor }]} />
@@ -353,7 +394,7 @@ function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps)
               <View style={styles.carryInline}>
                 <RotateCcw size={9} color={C.fgTertiary} />
                 <Text style={styles.carryInlineText}>
-                  {task.carryOverCount === 1 ? 'from yesterday' : `deferred ${task.carryOverCount}×`}
+                  {task.carryOverCount === 1 ? tr('today.from_yesterday') : `${tr('today.deferred_x')} ${task.carryOverCount}×`}
                 </Text>
               </View>
             </>
@@ -363,9 +404,20 @@ function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps)
 
       <View style={styles.blockRight}>
         {isFirst && !task.blocked ? (
-          <View style={styles.startBadge}>
-            <Text style={styles.startText}>Start</Text>
-            <ChevronRight size={14} color={C.gold400} />
+          <View style={styles.firstTaskActions}>
+            <Pressable
+              style={({ pressed }) => [styles.banBtnSmall, pressed && styles.banBtnPressed]}
+              onPress={onToggleBlocked}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Skip this task"
+            >
+              <Ban size={13} color={C.fgTertiary} />
+            </Pressable>
+            <Pressable style={styles.startBadge} onPress={onStart}>
+              <Text style={styles.startText}>{tr('today.start')}</Text>
+              <ChevronRight size={14} color={C.gold400} />
+            </Pressable>
           </View>
         ) : (
           <Pressable
@@ -379,11 +431,12 @@ function ScheduleBlock({ block, isFirst, onStart, onToggleBlocked }: BlockProps)
           </Pressable>
         )}
       </View>
-    </Pressable>
+    </View>
   );
 }
 
 function LunchBlock({ startTime, duration }: { startTime: string; duration: number }) {
+  const tr = useT();
   return (
     <View style={styles.lunchBlock}>
       <View style={styles.lunchTimeCol}>
@@ -391,7 +444,7 @@ function LunchBlock({ startTime, duration }: { startTime: string; duration: numb
       </View>
       <View style={styles.lunchContent}>
         <Utensils size={13} color={C.fgTertiary} />
-        <Text style={styles.lunchText}>Lunch</Text>
+        <Text style={styles.lunchText}>{tr('today.lunch')}</Text>
         <Text style={styles.lunchDuration}>{duration}m</Text>
       </View>
     </View>
@@ -408,11 +461,58 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: S[5],
+    alignItems: 'center',
+    paddingHorizontal: S[4],
     paddingTop: S[4],
-    paddingBottom: S[4],
+    paddingBottom: S[3],
+  },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: C.base700,
+    borderWidth: 1,
+    borderColor: C.borderSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconBtnPressed: {
+    backgroundColor: C.base600,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: S[2],
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[3],
+    flexWrap: 'wrap',
+  },
+  dayToggle: {
+    flexDirection: 'row',
+    backgroundColor: C.base700,
+    borderRadius: 20,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: C.borderSubtle,
+  },
+  dayToggleChip: {
+    paddingHorizontal: S[3],
+    paddingVertical: 4,
+    borderRadius: 18,
+  },
+  dayToggleChipActive: {
+    backgroundColor: C.gold500,
+  },
+  dayToggleText: {
+    fontFamily: Font.bodyMedium,
+    fontSize: Size.xs,
+    color: C.fgTertiary,
+    letterSpacing: 0.3,
+  },
+  dayToggleTextActive: {
+    color: C.base900,
   },
   dateLabel: {
     fontFamily: Font.bodyMedium,
@@ -423,22 +523,9 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: Font.display,
-    fontSize: Size['3xl'],
+    fontSize: Size['2xl'],
     color: C.fgPrimary,
-    lineHeight: Size['3xl'] * 1.1,
-  },
-  bellBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: C.base700,
-    borderWidth: 1,
-    borderColor: C.borderSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bellBtnPressed: {
-    backgroundColor: C.base600,
+    lineHeight: Size['2xl'] * 1.1,
   },
   scroll: {
     flex: 1,
@@ -644,8 +731,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   blockRight: {
-    minWidth: 56,
     alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  firstTaskActions: {
+    alignItems: 'flex-end',
+    gap: 4,
   },
   startBadge: {
     flexDirection: 'row',
@@ -664,6 +755,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  banBtnSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
@@ -729,7 +828,7 @@ const styles = StyleSheet.create({
     color: C.fgTertiary,
     textAlign: 'center',
   },
-  backBtn: {
+  emptyBackBtn: {
     backgroundColor: C.gold500,
     borderRadius: 14,
     paddingHorizontal: S[6],
@@ -738,11 +837,11 @@ const styles = StyleSheet.create({
     minHeight: 48,
     justifyContent: 'center',
   },
-  backBtnPressed: {
+  emptyBackBtnPressed: {
     backgroundColor: C.gold400,
     transform: [{ scale: 0.98 }],
   },
-  backBtnText: {
+  emptyBackBtnText: {
     fontFamily: Font.bodyMedium,
     fontSize: Size.base,
     color: C.base900,
