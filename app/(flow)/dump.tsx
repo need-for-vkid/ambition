@@ -165,10 +165,10 @@ export default function DumpScreen() {
         </Animated.View>
       )}
 
-      {/* Input bar — uses KeyboardAvoidingView for keyboard handling on both platforms */}
+      {/* Input bar — KAV padding on iOS; Android relies on softwareKeyboardLayoutMode=resize */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
       >
         <View style={[styles.inputSafe, { paddingBottom: insets.bottom || 12 }]}>
           <View style={styles.inputRow}>
