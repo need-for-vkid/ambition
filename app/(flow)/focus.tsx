@@ -38,6 +38,7 @@ export default function FocusScreen() {
   const [currentPomo, setCurrentPomo] = useState(0);
   const [notes, setNotes] = useState('');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const task = focusTask?.task;
   const workColor = task ? WORK_TYPE_COLORS[task.workType] : C.gold500;
@@ -108,10 +109,12 @@ export default function FocusScreen() {
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
           style={{ flex: 1 }}
         >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -204,6 +207,11 @@ export default function FocusScreen() {
               multiline
               numberOfLines={4}
               textAlignVertical="top"
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollRef.current?.scrollToEnd({ animated: true });
+                }, 100);
+              }}
             />
           </View>
 

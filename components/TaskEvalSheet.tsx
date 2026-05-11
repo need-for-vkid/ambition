@@ -3,11 +3,14 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   Platform,
   Pressable,
 } from 'react-native';
-import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  BottomSheetTextInput,
+} from '@gorhom/bottom-sheet';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import {
@@ -189,6 +192,9 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
       onClose={onClose}
       backgroundStyle={styles.sheetBg}
       handleIndicatorStyle={styles.handle}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
       backdropComponent={(props) => (
         <BottomSheetBackdrop
           {...props}
@@ -269,7 +275,7 @@ export function TaskEvalSheet({ pendingText, onAdd, onClose }: Props) {
         <Text style={styles.sectionLabel}>
           Duration <Text style={styles.optional}>optional</Text>
         </Text>
-        <TextInput
+        <BottomSheetTextInput
           style={styles.textInput}
           placeholder={durationPlaceholder}
           placeholderTextColor={C.fgTertiary}
