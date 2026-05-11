@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   Pressable,
   ScrollView,
   Platform,
-  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -58,6 +58,22 @@ export default function DumpScreen() {
   const { tasks, addTask, removeTask, toggleBlocked } = useTaskStore();
   const [inputText, setInputText] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const unblocked = tasks.filter((t) => !t.blocked);
   const blockedCount = tasks.filter((t) => t.blocked).length;
@@ -143,8 +159,8 @@ export default function DumpScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Sort CTA — floats above input bar */}
-      {canSort && (
+      {/* Sort CTA — floats above input bar (hidden while keyboard up) */}
+      {canSort && keyboardHeight === 0 && (
         <Animated.View
           entering={FadeIn}
           exiting={FadeOut}
@@ -165,40 +181,43 @@ export default function DumpScreen() {
         </Animated.View>
       )}
 
-      {/* Input bar — KAV padding on iOS; Android relies on softwareKeyboardLayoutMode=resize */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
+      {/* Input bar — manually lifted by keyboardHeight via Keyboard listener (works in Expo Go) */}
+      <View
+        style={[
+          styles.inputSafe,
+          {
+            paddingBottom: keyboardHeight > 0 ? S[3] : insets.bottom || 12,
+            marginBottom: keyboardHeight,
+          },
+        ]}
       >
-        <View style={[styles.inputSafe, { paddingBottom: insets.bottom || 12 }]}>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="Add a thought…"
-              placeholderTextColor={C.fgTertiary}
-              value={inputText}
-              onChangeText={setInputText}
-              onSubmitEditing={handleSubmitText}
-              returnKeyType="done"
-              multiline={false}
-              accessibilityLabel="Add a thought"
-            />
-            <Pressable
-              style={({ pressed }) => [
-                styles.inputBtn,
-                !inputText.trim() && styles.inputBtnDisabled,
-                pressed && inputText.trim() && styles.inputBtnPressed,
-              ]}
-              onPress={handleSubmitText}
-              disabled={!inputText.trim()}
-              accessibilityRole="button"
-              accessibilityLabel="Submit thought"
-            >
-              <ArrowUp size={18} color={inputText.trim() ? C.base900 : C.fgTertiary} />
-            </Pressable>
-          </View>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            placeholder="Add a thought…"
+            placeholderTextColor={C.fgTertiary}
+            value={inputText}
+            onChangeText={setInputText}
+            onSubmitEditing={handleSubmitText}
+            returnKeyType="done"
+            multiline={false}
+            accessibilityLabel="Add a thought"
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.inputBtn,
+              !inputText.trim() && styles.inputBtnDisabled,
+              pressed && inputText.trim() && styles.inputBtnPressed,
+            ]}
+            onPress={handleSubmitText}
+            disabled={!inputText.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Submit thought"
+          >
+            <ArrowUp size={18} color={inputText.trim() ? C.base900 : C.fgTertiary} />
+          </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       {/* TaskEvalSheet */}
       {sheetOpen && (

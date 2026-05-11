@@ -7,10 +7,10 @@ import {
   TextInput,
   ScrollView,
   Platform,
-  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { X, Pause, Play, Check } from 'lucide-react-native';
@@ -30,6 +30,7 @@ function impact(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle
 
 export default function FocusScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { focusTask, markCurrentTaskDone } = useTaskStore();
 
   const [secondsLeft, setSecondsLeft] = useState(POMO_DURATION);
@@ -37,6 +38,7 @@ export default function FocusScreen() {
   const [completedPomos, setCompletedPomos] = useState(0);
   const [currentPomo, setCurrentPomo] = useState(0);
   const [notes, setNotes] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -89,6 +91,27 @@ export default function FocusScreen() {
     };
   }, [running]);
 
+  // Keyboard listener — manually track height to push content up.
+  // Works reliably in Expo Go where KeyboardAvoidingView has platform-specific quirks.
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      // Scroll to the very bottom so Notes + controls sit above the keyboard
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const progress = 1 - secondsLeft / POMO_DURATION;
   const strokeOffset = RING_CIRCUMFERENCE * (1 - progress);
 
@@ -122,6 +145,10 @@ export default function FocusScreen() {
     );
   }
 
+  // When keyboard open, drop bottom safe-area inset (keyboard is now there).
+  // Otherwise the keyboard height + inset would double-pad.
+  const bottomPad = keyboardHeight > 0 ? keyboardHeight : insets.bottom;
+
   return (
     <View style={styles.root}>
       {/* Background gradient */}
@@ -135,14 +162,10 @@ export default function FocusScreen() {
         <Rect width="100%" height="100%" fill="url(#focusBg)" />
       </Svg>
 
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
+      <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: bottomPad + S[4] }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -240,7 +263,7 @@ export default function FocusScreen() {
               onFocus={() => {
                 setTimeout(() => {
                   scrollRef.current?.scrollToEnd({ animated: true });
-                }, 100);
+                }, 250);
               }}
             />
           </View>
@@ -272,7 +295,6 @@ export default function FocusScreen() {
             </Pressable>
           </View>
         </ScrollView>
-        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
@@ -283,9 +305,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: {
     paddingHorizontal: S[5],
-    paddingBottom: S[8],
     alignItems: 'center',
-    minHeight: '100%',
   },
   topBar: {
     flexDirection: 'row',
